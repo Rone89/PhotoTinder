@@ -11,3 +11,4 @@ targets:
       GENERATE_INFOPLIST_FILE: YES
       CODE_SIGNING_ALLOWED: NO
       INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "我们需要相册权限来筛选照片"
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
