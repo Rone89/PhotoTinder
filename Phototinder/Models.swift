@@ -2,13 +2,11 @@ import Foundation
 import Photos
 
 enum ReviewStatus {
-    case unreviewed
-    case keep
-    case delete
+    case unreviewed, keep, delete
 }
 
 struct PhotoItem: Identifiable, Equatable {
-    let id: String // 使用 PHAsset 的 localIdentifier
+    let id: String
     let asset: PHAsset
     var status: ReviewStatus = .unreviewed
     
@@ -19,11 +17,10 @@ struct PhotoItem: Identifiable, Equatable {
 
 struct MonthGroup: Identifiable {
     let id = UUID()
-    let title: String // 例如 "2023年10月"
-    let date: Date // 用于排序
+    let title: String
+    let date: Date
     var items: [PhotoItem]
     
     var unreviewedCount: Int { items.filter { $0.status == .unreviewed }.count }
     var deleteCount: Int { items.filter { $0.status == .delete }.count }
-    var keepCount: Int { items.filter { $0.status == .keep }.count }
 }
