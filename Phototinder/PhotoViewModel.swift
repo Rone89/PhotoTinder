@@ -4,15 +4,11 @@ import Photos
 @MainActor
 @Observable
 class PhotoViewModel {
-    var isAuthorized: Bool = false
-    var isLoading: Bool = false
+    var isAuthorized = false
+    var isLoading = false
     var monthGroups: [MonthGroup] = []
-    
-    // 当前正在阅览的月份和进度
     var currentGroupIndex: Int? = nil
     var currentCardIndex: Int = 0
-    
-    var errorMsg: String? = nil
     
     var currentGroup: MonthGroup? {
         guard let index = currentGroupIndex, monthGroups.indices.contains(index) else { return nil }
@@ -21,91 +17,49 @@ class PhotoViewModel {
     
     func checkPermissionAndFetch() async {
         isLoading = true
-        let hasPermission = await PhotoLibraryService.shared.requestAuthorization()
-        self.isAuthorized = hasPermission
-        
-        if hasPermission {
-            self.monthGroups = await PhotoLibraryService.shared.fetchAndGroupPhotos()
+        isAuthorized = await PhotoLibraryService.shared.requestAuthorization()
+        if isAuthorized {
+            monthGroups = await PhotoLibraryService.shared.fetchAndGroupPhotos()
         }
         isLoading = false
     }
     
-    // MARK: - 阅览与手势逻辑
-    
-    func startReviewing(groupIndex: Int) {
-        currentGroupIndex = groupIndex
-        // 找到第一个未处理的照片
-        if let firstUnreviewed = monthGroups[groupIndex].items.firstIndex(where: { $0.status == .unreviewed }) {
-            currentCardIndex = firstUnreviewed
-        } else {
-            currentCardIndex = 0
-        }
+    func startReviewing(index: Int) {
+        currentGroupIndex = index
+        currentCardIndex = monthGroups[index].items.firstIndex(where: { $0.status == .unreviewed }) ?? 0
     }
     
     func handleSwipe(direction: SwipeDirection) {
-        guard let groupIndex = currentGroupIndex else { return }
-        let itemsCount = monthGroups[groupIndex].items.count
-        
+        guard let gIdx = currentGroupIndex else { return }
         switch direction {
-        case .left: // 保留 (Keep) -> 下一张
-            if currentCardIndex < itemsCount {
-                monthGroups[groupIndex].items[currentCardIndex].status = .keep
-                advanceToNextCard()
-            }
-        case .up: // 删除 (Delete) -> 下一张
-            if currentCardIndex < itemsCount {
-                monthGroups[groupIndex].items[currentCardIndex].status = .delete
-                advanceToNextCard()
-            }
-        case .right: // 撤销 (Undo) -> 上一张
+        case .left: monthGroups[gIdx].items[currentCardIndex].status = .keep
+        case .up: monthGroups[gIdx].items[currentCardIndex].status = .delete
+        case .right: 
             if currentCardIndex > 0 {
                 currentCardIndex -= 1
-                monthGroups[groupIndex].items[currentCardIndex].status = .unreviewed
+                monthGroups[gIdx].items[currentCardIndex].status = .unreviewed
+                return
             }
-        case .down:
-            break // 忽略下滑
+        case .down: break
         }
-    }
-    
-    private func advanceToNextCard() {
-        // 稍微延迟以等待动画完成（实际项目中可由 View 层的动画完成回调触发）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.currentCardIndex += 1
         }
     }
     
-    // MARK: - 批量操作
-    func commitDeletion() async {
-        guard let groupIndex = currentGroupIndex else { return }
-        let group = monthGroups[groupIndex]
-        
-        let assetsToDelete = group.items.filter { $0.status == .delete }.map { $0.asset }
-        guard !assetsToDelete.isEmpty else { return }
-        
-        do {
-            try await PhotoLibraryService.shared.deleteAssets(assetsToDelete)
-            // 删除成功后，从数据源中移除
-            monthGroups[groupIndex].items.removeAll { $0.status == .delete }
-            currentCardIndex = monthGroups[groupIndex].items.count // 刷新状态
-        } catch {
-            self.errorMsg = "删除失败: \(error.localizedDescription)"
+    func cancelDelete(for id: String) {
+        guard let gIdx = currentGroupIndex else { return }
+        if let iIdx = monthGroups[gIdx].items.firstIndex(where: { $0.id == id }) {
+            monthGroups[gIdx].items[iIdx].status = .keep
         }
     }
     
-    // 新增：取消标记删除
-    func cancelDelete(for itemID: String) {
-        guard let groupIndex = currentGroupIndex else { return }
-        // 找到该照片，将其状态改回保留
-        if let itemIndex = monthGroups[groupIndex].items.firstIndex(where: { $0.id == itemID }) {
-            monthGroups[groupIndex].items[itemIndex].status = .keep
-        }
-    }
-    func closeReview() {
-        currentGroupIndex = nil
-        currentCardIndex = 0
+    func commitDeletion() async {
+        guard let gIdx = currentGroupIndex else { return }
+        let assets = monthGroups[gIdx].items.filter { $0.status == .delete }.map { $0.asset }
+        try? await PhotoLibraryService.shared.deleteAssets(assets)
+        monthGroups[gIdx].items.removeAll { $0.status == .delete }
     }
 }
 
-enum SwipeDirection {
-    case left, right, up, down
-}
+enum SwipeDirection { case left, right, up, down }
