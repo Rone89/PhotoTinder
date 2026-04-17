@@ -4,7 +4,7 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    sources: [Photo tinder]
+    sources: [Phototinder]
     settings:
       CODE_SIGNING_ALLOWED: NO
       CODE_SIGNING_REQUIRED: NO
