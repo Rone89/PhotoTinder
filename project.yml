@@ -9,7 +9,7 @@ targets:
     platform: iOS
     deploymentTarget: "17.0" # 必须 17.0+ 以支持新的动画和 SF Symbols 效果
     sources: 
-      - PhotoTinder # 确保你的代码都在这个文件夹里
+      - Phototinder
     settings:
       GENERATE_INFOPLIST_FILE: YES
       CODE_SIGNING_ALLOWED: NO
