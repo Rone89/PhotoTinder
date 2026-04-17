@@ -92,6 +92,14 @@ class PhotoViewModel {
         }
     }
     
+    // 新增：取消标记删除
+    func cancelDelete(for itemID: String) {
+        guard let groupIndex = currentGroupIndex else { return }
+        // 找到该照片，将其状态改回保留
+        if let itemIndex = monthGroups[groupIndex].items.firstIndex(where: { $0.id == itemID }) {
+            monthGroups[groupIndex].items[itemIndex].status = .keep
+        }
+    }
     func closeReview() {
         currentGroupIndex = nil
         currentCardIndex = 0
