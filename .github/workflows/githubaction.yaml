@@ -1,6 +1,9 @@
 name: Build Unsigned IPA
 on: [push]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # 消除那个烦人的 Node 警告
+
 jobs:
   build:
     runs-on: macos-latest
@@ -11,7 +14,7 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate Xcode Project
+      - name: Generate Project
         run: xcodegen generate
 
       - name: Build App
@@ -23,14 +26,14 @@ jobs:
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
-      - name: Create Unsigned IPA
+      - name: Create Payload
         run: |
           mkdir -p Payload
-          # 将编译生成的 .app 文件移动到 Payload 文件夹
-          cp -r build/Release-iphoneos/PhotoTinder.app Payload/
-          # 压缩成 ipa
+          # 使用通配符查找 .app，防止路径名字对不上
+          cp -r build/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -r ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Release-iphoneos/*.app Payload/
           zip -r PhotoTinder_Unsigned.ipa Payload
 
       - name: Upload IPA
