@@ -1,14 +1,21 @@
 name: PhotoTinder
 options:
   bundleIdPrefix: com.temp
+  # 强制开启自动生成，解决 Info.plist 找不到的问题
+  generateDevelopmentInfoPlist: true 
 targets:
   PhotoTinder:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
-    sources: [.]
+    deploymentTarget: "17.0" # 必须 17.0+ 以支持新的动画和 SF Symbols 效果
+    sources: 
+      - PhotoTinder # 确保你的代码都在这个文件夹里
     settings:
       GENERATE_INFOPLIST_FILE: YES
       CODE_SIGNING_ALLOWED: NO
+      # 适配全屏，解决黑边问题
       INFOPLIST_KEY_UILaunchScreen_Generation: YES
-      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "我们需要相册权限来筛选照片"
+      # 相册权限声明
+      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "我们需要访问您的相册以帮助您筛选和清理照片"
+      # 界面只支持竖屏（防止横屏导致 UI 错乱）
+      INFOPLIST_KEY_UISupportedInterfaceOrientations: ["UIInterfaceOrientationPortrait"]
