@@ -21,6 +21,7 @@ struct ReviewView: View {
                             if viewModel.currentCardIndex + 1 < group.items.count {
                                 let nextItem = group.items[viewModel.currentCardIndex + 1]
                                 PhotoCardView(item: nextItem, onSwipe: { _ in })
+                                    .id(currentItem.id)
                                     .scaleEffect(0.95)
                                     .zIndex(0)
                             }
@@ -30,6 +31,7 @@ struct ReviewView: View {
                             PhotoCardView(item: currentItem, onSwipe: { direction in
                                 viewModel.handleSwipe(direction: direction)
                             })
+                            .id(currentItem.id)
                             .zIndex(1)
                             // 加上一个转场动画让退回（右滑）时平滑
                             .transition(.asymmetric(insertion: .move(edge: .leading), removal: .opacity))
