@@ -6,9 +6,9 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    sources: [.] # <--- 关键修改：直接让它在当前目录下找所有代码，不用管文件夹叫什么
+    sources: [.]
     settings:
       GENERATE_INFOPLIST_FILE: YES
       CODE_SIGNING_ALLOWED: NO
-      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "我们需要相册权限来筛选照片"
       INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "我们需要相册权限来筛选照片"
