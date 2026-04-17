@@ -1,12 +1,13 @@
 name: PhotoTinder
+options:
+  bundleIdPrefix: com.temp
 targets:
   PhotoTinder:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    sources: [Phototinder]
+    sources: [Phototinder] # <--- 关键修改：直接让它在当前目录下找所有代码，不用管文件夹叫什么
     settings:
+      GENERATE_INFOPLIST_FILE: YES
       CODE_SIGNING_ALLOWED: NO
-      CODE_SIGNING_REQUIRED: NO
-      CODE_SIGN_IDENTITY: ""
-      AD_HOC_CODE_SIGNING_ALLOWED: YES
+      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "我们需要相册权限来筛选照片"
