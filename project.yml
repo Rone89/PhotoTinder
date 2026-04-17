@@ -6,7 +6,7 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    sources: [Phototinder] # <--- 关键修改：直接让它在当前目录下找所有代码，不用管文件夹叫什么
+    sources: [.] # <--- 关键修改：直接让它在当前目录下找所有代码，不用管文件夹叫什么
     settings:
       GENERATE_INFOPLIST_FILE: YES
       CODE_SIGNING_ALLOWED: NO
