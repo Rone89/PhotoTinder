@@ -447,7 +447,7 @@ struct ZoomablePhotoCard: View {
             .animation(.spring(response: 0.2, dampingFraction: 0.85), value: scale)
             .animation(.easeInOut(duration: 0.15), value: translation)
             // 手势
-            .gesture(magnificationGesture(baseSize: baseSize))
+            .gesture(magnificationGesture)
             .simultaneousGesture(dragGesture)
     }
 

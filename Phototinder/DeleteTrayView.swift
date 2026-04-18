@@ -62,31 +62,3 @@ struct DeleteTrayView: View {
     }
 }
 
-// MARK: - MiniThumbnail（用于删除托盘和回收站网格）
-
-struct MiniThumbnail: View {
-    let asset: PHAsset
-    @State private var image: UIImage?
-
-    private let sizes: [CGSize] = [
-        CGSize(width: 200, height: 200),
-        CGSize(width: 100, height: 100)
-    ]
-
-    var body: some View {
-        Rectangle()
-            .fill(Color(.systemGray5))
-            .aspectRatio(1, contentMode: .fit)
-            .overlay {
-                if let ui = image {
-                    Image(uiImage: ui).resizable().scaledToFill().clipped()
-                } else {
-                    ProgressView().scaleEffect(0.8).tint(.gray)
-                }
-            }
-            .task(id: asset.localIdentifier) {
-                image = nil
-                image = await PhotoLoader.loadWithFallback(for: asset, sizes: sizes, contentMode: .aspectFill)
-            }
-    }
-}
