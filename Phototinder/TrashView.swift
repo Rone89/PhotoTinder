@@ -9,19 +9,75 @@ struct TrashView: View {
     @State private var lastDeletedCount = 0
     @State private var selectedItem: PhotoItem?
     @State private var showDetail = false
-    @State private var showRestoreAlert = false
+    @State private var isEditMode = false
+    @State private var selectedItems: Set<String> = []
 
     let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
 
-    private var contentBody: some View {
-        Group {
-            if viewModel.trashGroups.isEmpty {
-                emptyView
-            } else {
-                trashScrollView
+    // MARK: - Body
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if viewModel.trashGroups.isEmpty {
+                    emptyView
+                } else {
+                    trashScrollView
+                }
+            }
+            .navigationTitle("回收站")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if isEditMode {
+                        Button("完成") { isEditMode = false; selectedItems.removeAll() }
+                    } else {
+                        Button("完成") { dismiss() }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if isEditMode {
+                        editToolbarButtons
+                    } else if !viewModel.trashGroups.isEmpty {
+                        normalToolbarButtons
+                    }
+                }
+            }
+            .alert("确认删除", isPresented: $showConfirmDeleteAlert) {
+                Button("取消", role: .cancel) {}
+                Button("删除", role: .destructive) { deleteSelectedOrAll() }
+            } message: {
+                Text("确定要删除选中的 \(deleteTargetCount) 张照片吗？此操作不可撤销。")
+            }
+            .alert("删除完成", isPresented: $showDeleteSuccessAlert) {
+                Button("好的") {}
+            } message: {
+                Text("已成功删除 \(lastDeletedCount) 张照片")
+            }
+            .fullScreenCover(isPresented: $showDetail) {
+                if let item = selectedItem {
+                    TrashDetailView(item: item) {
+                        viewModel.restoreFromTrash(item)
+                        showDetail = false
+                    } onDelete: {
+                        deleteSingleItem(item)
+                        showDetail = false
+                    } onDismiss: {
+                        showDetail = false
+                    }
+                }
             }
         }
     }
+
+    // MARK: - Computed
+
+    private var deleteTargetCount: Int {
+        if isEditMode && !selectedItems.isEmpty { return selectedItems.count }
+        return viewModel.totalTrashCount
+    }
+
+    // MARK: - Subviews
 
     private var emptyView: some View {
         ContentUnavailableView {
@@ -58,14 +114,28 @@ struct TrashView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             Spacer()
-            Button {
-                for item in group.items {
-                    viewModel.restoreFromTrash(item)
+            if isEditMode {
+                Button {
+                    let ids = Set(group.items.map(\.id))
+                    if selectedItems.isSuperset(of: ids) {
+                        selectedItems.subtract(ids)
+                    } else {
+                        selectedItems.formUnion(ids)
+                    }
+                } label: {
+                    let allSelected = selectedItems.isSuperset(of: Set(group.items.map(\.id)))
+                    Text(allSelected ? "取消全选" : "全选")
+                        .font(.caption)
+                        .foregroundColor(.blue)
                 }
-            } label: {
-                Label("恢复此组", systemImage: "arrow.uturn.left.circle")
-                    .font(.caption)
-                    .foregroundColor(.blue)
+            } else {
+                Button {
+                    for item in group.items { viewModel.restoreFromTrash(item) }
+                } label: {
+                    Label("恢复此组", systemImage: "arrow.uturn.left.circle")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
             }
         }
         .padding(.horizontal)
@@ -76,26 +146,37 @@ struct TrashView: View {
             ForEach(group.items) { item in
                 ThumbnailView(asset: item.asset)
                     .overlay(alignment: .topTrailing) {
-                        Image(systemName: "minus.circle.fill")
-                            .foregroundColor(.red)
-                            .font(.title3)
-                            .background(Circle().fill(.white).padding(1))
-                            .padding(4)
+                        if isEditMode {
+                            selectionBadge(item)
+                        } else {
+                            deleteBadge
+                        }
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        if isEditMode && selectedItems.contains(item.id) {
+                            Color.blue.opacity(0.3)
+                        }
                     }
                     .onTapGesture {
-                        selectedItem = item
-                        showDetail = true
+                        if isEditMode {
+                            toggleSelection(item)
+                        } else {
+                            selectedItem = item
+                            showDetail = true
+                        }
                     }
                     .contextMenu {
-                        Button {
-                            viewModel.restoreFromTrash(item)
-                        } label: {
-                            Label("移出回收站", systemImage: "arrow.uturn.left")
-                        }
-                        Button(role: .destructive) {
-                            deleteSingleItem(item)
-                        } label: {
-                            Label("立即删除", systemImage: "trash.fill")
+                        if !isEditMode {
+                            Button {
+                                viewModel.restoreFromTrash(item)
+                            } label: {
+                                Label("移出回收站", systemImage: "arrow.uturn.left")
+                            }
+                            Button(role: .destructive) {
+                                deleteSingleItem(item)
+                            } label: {
+                                Label("立即删除", systemImage: "trash.fill")
+                            }
                         }
                     }
             }
@@ -103,64 +184,28 @@ struct TrashView: View {
         .padding(.horizontal)
     }
 
-    private func deleteSingleItem(_ item: PhotoItem) {
-        Task {
-            let assets = [item.asset]
-            try? await PhotoLibraryService.shared.deleteAssets(assets)
-            let deleteId = item.id
-            for groupIndex in viewModel.monthGroups.indices {
-                viewModel.monthGroups[groupIndex].items.removeAll { $0.id == deleteId }
-            }
-            lastDeletedCount = 1
-            showDeleteSuccessAlert = true
-        }
+    private func selectionBadge(_ item: PhotoItem) -> some View {
+        let isSelected = selectedItems.contains(item.id)
+        return Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.title3)
+            .foregroundColor(isSelected ? .blue : .white)
+            .background(
+                Circle().fill(.white).shadow(radius: 1).padding(1)
+            )
+            .padding(4)
     }
 
-    var body: some View {
-        NavigationStack {
-            contentBody
-                .navigationTitle("回收站")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("完成") { dismiss() }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        if !viewModel.trashGroups.isEmpty {
-                            toolbarButtons
-                        }
-                    }
-                }
-                .alert("确认删除", isPresented: $showConfirmDeleteAlert) {
-                    Button("取消", role: .cancel) {}
-                    Button("删除", role: .destructive) {
-                        deleteAll()
-                    }
-                } message: {
-                    Text("确定要删除回收站中的 \(viewModel.totalTrashCount) 张照片吗？此操作不可撤销。")
-                }
-                .alert("删除完成", isPresented: $showDeleteSuccessAlert) {
-                    Button("好的") {}
-                } message: {
-                    Text("已成功删除 \(lastDeletedCount) 张照片")
-                }
-                .fullScreenCover(isPresented: $showDetail) {
-                    if let item = selectedItem {
-                        TrashDetailView(item: item) {
-                            viewModel.restoreFromTrash(item)
-                            showDetail = false
-                        } onDelete: {
-                            deleteSingleItem(item)
-                            showDetail = false
-                        } onDismiss: {
-                            showDetail = false
-                        }
-                    }
-                }
-        }
+    private var deleteBadge: some View {
+        Image(systemName: "minus.circle.fill")
+            .foregroundColor(.red)
+            .font(.title3)
+            .background(Circle().fill(.white).padding(1))
+            .padding(4)
     }
 
-    private var toolbarButtons: some View {
+    // MARK: - Toolbar
+
+    private var normalToolbarButtons: some View {
         HStack(spacing: 16) {
             Button {
                 viewModel.restoreAllFromTrash()
@@ -168,7 +213,12 @@ struct TrashView: View {
                 Label("全部恢复", systemImage: "arrow.uturn.left.circle")
                     .font(.subheadline)
             }
-
+            Button {
+                isEditMode = true
+            } label: {
+                Label("选择", systemImage: "checkmark.circle")
+                    .font(.subheadline)
+            }
             Button(role: .destructive) {
                 showConfirmDeleteAlert = true
             } label: {
@@ -178,20 +228,94 @@ struct TrashView: View {
         }
     }
 
-    private func deleteAll() {
+    private var editToolbarButtons: some View {
+        HStack(spacing: 16) {
+            if !selectedItems.isEmpty {
+                Button {
+                    for id in selectedItems {
+                        if let item = findItemById(id) {
+                            viewModel.restoreFromTrash(item)
+                        }
+                    }
+                    selectedItems.removeAll()
+                    isEditMode = false
+                } label: {
+                    Label("移出回收站", systemImage: "arrow.uturn.left.circle")
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                }
+                Button(role: .destructive) {
+                    showConfirmDeleteAlert = true
+                } label: {
+                    Label("删除选中", systemImage: "trash.fill")
+                        .font(.subheadline)
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func toggleSelection(_ item: PhotoItem) {
+        if selectedItems.contains(item.id) {
+            selectedItems.remove(item.id)
+        } else {
+            selectedItems.insert(item.id)
+        }
+    }
+
+    private func findItemById(_ id: String) -> PhotoItem? {
+        for group in viewModel.monthGroups {
+            if let item = group.items.first(where: { $0.id == id }) {
+                return item
+            }
+        }
+        return nil
+    }
+
+    private func deleteSingleItem(_ item: PhotoItem) {
         Task {
-            let allDeleteAssets = viewModel.monthGroups.flatMap { group in
-                group.items.filter { $0.status == .delete }.map { $0.asset }
-            }
-            guard !allDeleteAssets.isEmpty else { return }
-
-            try? await PhotoLibraryService.shared.deleteAssets(allDeleteAssets)
-
+            try? await PhotoLibraryService.shared.deleteAssets([item.asset])
+            let deleteId = item.id
             for groupIndex in viewModel.monthGroups.indices {
-                viewModel.monthGroups[groupIndex].items.removeAll { $0.status == .delete }
+                viewModel.monthGroups[groupIndex].items.removeAll { $0.id == deleteId }
             }
+            lastDeletedCount = 1
+            showDeleteSuccessAlert = true
+        }
+    }
 
-            lastDeletedCount = allDeleteAssets.count
+    private func deleteSelectedOrAll() {
+        Task {
+            if isEditMode && !selectedItems.isEmpty {
+                // 删除选中的
+                var assets: [PHAsset] = []
+                for id in selectedItems {
+                    if let item = findItemById(id) {
+                        assets.append(item.asset)
+                    }
+                }
+                guard !assets.isEmpty else { return }
+                try? await PhotoLibraryService.shared.deleteAssets(assets)
+                let idsToDelete = selectedItems
+                for groupIndex in viewModel.monthGroups.indices {
+                    viewModel.monthGroups[groupIndex].items.removeAll { idsToDelete.contains($0.id) }
+                }
+                lastDeletedCount = assets.count
+            } else {
+                // 删除全部
+                let allDeleteAssets = viewModel.monthGroups.flatMap { group in
+                    group.items.filter { $0.status == .delete }.map { $0.asset }
+                }
+                guard !allDeleteAssets.isEmpty else { return }
+                try? await PhotoLibraryService.shared.deleteAssets(allDeleteAssets)
+                for groupIndex in viewModel.monthGroups.indices {
+                    viewModel.monthGroups[groupIndex].items.removeAll { $0.status == .delete }
+                }
+                lastDeletedCount = allDeleteAssets.count
+            }
+            selectedItems.removeAll()
+            isEditMode = false
             showDeleteSuccessAlert = true
         }
     }
@@ -230,14 +354,10 @@ struct TrashDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button {
-                            onRestore()
-                        } label: {
+                        Button { onRestore() } label: {
                             Label("移出回收站", systemImage: "arrow.uturn.left")
                         }
-                        Button(role: .destructive) {
-                            onDelete()
-                        } label: {
+                        Button(role: .destructive) { onDelete() } label: {
                             Label("立即删除", systemImage: "trash.fill")
                         }
                     } label: {
@@ -247,29 +367,34 @@ struct TrashDetailView: View {
             }
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .onAppear {
-                loadImage()
-            }
+            .onAppear { loadImage() }
         }
     }
 
     private func loadImage() {
         guard image == nil, !isLoading else { return }
         isLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
+            options.isSynchronous = true
 
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = true
-        options.deliveryMode = .highQualityFormat
-        options.resizeMode = .exact
+            var resultImage: UIImage?
+            PHImageManager.default().requestImage(
+                for: item.asset,
+                targetSize: PHImageManagerMaximumSize,
+                contentMode: .aspectFit,
+                options: options
+            ) { img, _ in
+                resultImage = img
+            }
 
-        PHImageManager.default().requestImage(
-            for: item.asset,
-            targetSize: PHImageManagerMaximumSize,
-            contentMode: .aspectFit,
-            options: options
-        ) { image, _ in
-            self.image = image
-            self.isLoading = false
+            DispatchQueue.main.async {
+                self.image = resultImage
+                self.isLoading = false
+            }
         }
     }
 }
