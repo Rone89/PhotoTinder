@@ -344,6 +344,7 @@ struct PhotoCardView: View {
     @State private var livePhotoView: PHLivePhotoView?
     @State private var isLivePhoto = false
     @State private var isPlayingLive = false
+    @State private var isHDR = false
 
     /// 根据照片像素计算宽高比
     private var photoAspectRatio: CGFloat {
@@ -363,11 +364,12 @@ struct PhotoCardView: View {
                 StaticPhotoView(item: item)
             }
 
-            // LIVE 标记（左上角）
-            if isLivePhoto {
+            // LIVE + HDR 标记（左上角）
+            if isLivePhoto || isHDR {
                 VStack {
-                    HStack {
-                        liveBadge
+                    HStack(spacing: 6) {
+                        if isLivePhoto { liveBadge }
+                        if isHDR { hdrBadge }
                         Spacer()
                     }
                     Spacer()
@@ -386,6 +388,7 @@ struct PhotoCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .task(id: item.id) {
             isLivePhoto = item.asset.mediaSubtypes.contains(.photoLive)
+            isHDR = item.asset.mediaSubtypes.contains(.photoHDR)
             if isLivePhoto {
                 loadLivePhoto()
             }
@@ -400,6 +403,26 @@ struct PhotoCardView: View {
                 isPlayingLive = false
             }
         }
+    }
+
+    // MARK: - HDR 标记
+
+    private var hdrBadge: some View {
+        Text("HDR")
+            .font(.system(size: 11, weight: .black, design: .rounded))
+            .tracking(1.2)
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(.orange.opacity(0.6))
+                    .blur(radius: 1)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
+            )
     }
 
     // MARK: - LIVE 标记
@@ -441,7 +464,7 @@ struct PhotoCardView: View {
                 let view = PHLivePhotoView()
                 view.contentMode = .scaleAspectFit
                 view.livePhoto = livePhoto
-                view.isMuted = true
+                view.isMuted = false
                 self.livePhotoView = view
             }
         }

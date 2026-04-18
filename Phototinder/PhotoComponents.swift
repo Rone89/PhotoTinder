@@ -17,6 +17,7 @@ enum PhotoLoader {
             options.deliveryMode = .opportunistic
             options.resizeMode = .fast
             options.isSynchronous = false
+            options.version = .current  // 获取当前版本（包含 HDR 渲染）
 
             PHImageManager.default().requestImage(
                 for: asset,

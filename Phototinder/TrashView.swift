@@ -279,6 +279,7 @@ struct TrashDetailView: View {
     @State private var livePhotoView: PHLivePhotoView?
     @State private var isLivePhoto = false
     @State private var isPlayingLive = false
+    @State private var isHDR = false
 
     /// 根据照片像素计算宽高比
     private var photoAspectRatio: CGFloat {
@@ -296,7 +297,7 @@ struct TrashDetailView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color(.systemBackground).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // 照片区域（根据比例自动调整，无白边）
@@ -313,7 +314,6 @@ struct TrashDetailView: View {
         }
         .navigationTitle("照片详情")
         .navigationBarTitleDisplayMode(.inline)
-        .preferredColorScheme(.dark)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -326,7 +326,7 @@ struct TrashDetailView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
-                        .foregroundColor(.white)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -334,6 +334,7 @@ struct TrashDetailView: View {
             image = nil
             loadFailed = false
             isLivePhoto = item.asset.mediaSubtypes.contains(.photoLive)
+            isHDR = item.asset.mediaSubtypes.contains(.photoHDR)
 
             if isLivePhoto {
                 loadLivePhoto()
@@ -358,14 +359,15 @@ struct TrashDetailView: View {
             } else if loadFailed {
                 errorContent
             } else {
-                ProgressView().controlSize(.large).tint(.white)
+                ProgressView().controlSize(.large).tint(.gray)
             }
 
-            // LIVE 标记
-            if isLivePhoto {
+            // LIVE + HDR 标记
+            if isLivePhoto || isHDR {
                 VStack {
-                    HStack {
-                        liveBadge
+                    HStack(spacing: 6) {
+                        if isLivePhoto { liveBadge }
+                        if isHDR { hdrBadge }
                         Spacer()
                     }
                     Spacer()
@@ -402,6 +404,26 @@ struct TrashDetailView: View {
             )
     }
 
+    // MARK: - HDR 标记
+
+    private var hdrBadge: some View {
+        Text("HDR")
+            .font(.system(size: 11, weight: .black, design: .rounded))
+            .tracking(1.2)
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(.orange.opacity(0.6))
+                    .blur(radius: 1)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
+            )
+    }
+
     // MARK: - 加载 Live Photo
 
     private func loadLivePhoto() {
@@ -421,7 +443,7 @@ struct TrashDetailView: View {
                 let view = PHLivePhotoView()
                 view.contentMode = .scaleAspectFit
                 view.livePhoto = livePhoto
-                view.isMuted = true
+                view.isMuted = false
                 self.livePhotoView = view
             }
         }
@@ -431,9 +453,9 @@ struct TrashDetailView: View {
         VStack(spacing: 12) {
             Image(systemName: "photo.badge.exclamationmark")
                 .font(.system(size: 50))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(.secondary)
             Text("无法加载此照片")
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(.secondary)
         }
     }
 }

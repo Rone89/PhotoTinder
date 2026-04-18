@@ -61,6 +61,16 @@ struct PhotoInfoPanel: View {
                     .background(Capsule().fill(.orange))
             }
 
+            // HDR 标记
+            if asset.mediaSubtypes.contains(.photoHDR) {
+                Text("HDR")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.orange.opacity(0.8)))
+            }
+
             if let date = asset.creationDate {
                 Text(formatDate(date))
                     .font(.caption.monospacedDigit())
@@ -95,9 +105,13 @@ struct PhotoInfoPanel: View {
 
             infoRow(icon: "crop", title: "分辨率", value: "\(asset.pixelWidth) × \(asset.pixelHeight)")
 
-            // Live Photo 信息
-            if asset.mediaSubtypes.contains(.photoLive) {
+            // Live Photo / HDR / 静态照片
+            let isLive = asset.mediaSubtypes.contains(.photoLive)
+            let isHdr = asset.mediaSubtypes.contains(.photoHDR)
+            if isLive {
                 infoRow(icon: "livephoto", title: "类型", value: "Live Photo")
+            } else if isHdr {
+                infoRow(icon: "photo", title: "类型", value: "HDR 照片")
             } else {
                 infoRow(icon: "photo", title: "类型", value: "静态照片")
             }
