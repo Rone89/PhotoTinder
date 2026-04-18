@@ -236,18 +236,22 @@ struct ReviewView: View {
     }
 }
 
-// MARK: - PhotoLoader（使用 isSynchronous=false 避免 deadlock）
+// MARK: - PhotoLoader（opportunistic + fast 确保回调一定触发）
 
 enum PhotoLoader {
-    /// 异步加载单张图片，isSynchronous=false 避免线程死锁
+    /// 异步加载图片。deliveryMode=.opportunistic 保证一定会触发非降级回调，不会挂起。
+    /// resizeMode=.fast 对 HEIF/Live Photo 等格式更宽容。
     static func load(for asset: PHAsset,
                      size: CGSize,
                      contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
         await withCheckedContinuation { continuation in
+            var bestImage: UIImage?
+            var resumed = false
+
             let options = PHImageRequestOptions()
             options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
+            options.deliveryMode = .opportunistic
+            options.resizeMode = .fast
             options.isSynchronous = false
 
             PHImageManager.default().requestImage(
@@ -255,8 +259,14 @@ enum PhotoLoader {
                 targetSize: size,
                 contentMode: contentMode,
                 options: options
-            ) { image, _ in
-                continuation.resume(returning: image)
+            ) { image, info in
+                if let image { bestImage = image }
+                // 非降级回调 = 最终结果，无论有没有图片都必须 resume
+                let isDegraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                if !isDegraded && !resumed {
+                    resumed = true
+                    continuation.resume(returning: bestImage)
+                }
             }
         }
     }
