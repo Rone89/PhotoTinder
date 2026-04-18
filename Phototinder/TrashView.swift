@@ -3,119 +3,115 @@ import Photos
 
 struct TrashView: View {
     @Environment(PhotoViewModel.self) var viewModel
-    @State private var deletedItems: [PhotoItem] = []
-    @State private var isLoading = true
+    @Environment(\.dismiss) var dismiss
+    
     let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
     
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading {
-                    ProgressView("加载中...")
-                } else if deletedItems.isEmpty {
+                if viewModel.trashGroups.isEmpty {
                     ContentUnavailableView {
                         Label("回收站为空", systemImage: "trash")
                     } description: {
-                        Text("没有待恢复的照片")
+                        Text("没有待删除的照片")
                     }
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("共 \(deletedItems.count) 张照片")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Button {
-                                    Task { await recoverAll() }
-                                } label: {
-                                    Label("全部恢复", systemImage: "arrow.uturn.left.circle")
-                                        .font(.subheadline)
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                            .padding(.horizontal)
-                            .padding(.top, 4)
-                            
-                            LazyVGrid(columns: columns, spacing: 2) {
-                                ForEach(deletedItems) { item in
-                                    ThumbnailView(asset: item.asset)
-                                        .overlay(alignment: .bottom) {
-                                            LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
-                                                .frame(height: 30)
-                                                .overlay(alignment: .bottomLeading) {
-                                                    if let date = item.asset.creationDate {
-                                                        Text(formatRemainingDays(date))
-                                                            .font(.caption2)
-                                                            .foregroundColor(.white)
-                                                            .padding(4)
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            ForEach(viewModel.trashGroups) { group in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text(group.title)
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                        Text("\(group.items.count) 张")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Spacer()
+                                        Button {
+                                            for item in group.items {
+                                                viewModel.restoreFromTrash(item)
+                                            }
+                                        } label: {
+                                            Label("恢复此组", systemImage: "arrow.uturn.left.circle")
+                                                .font(.caption)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                    
+                                    LazyVGrid(columns: columns, spacing: 2) {
+                                        ForEach(group.items) { item in
+                                            ThumbnailView(asset: item.asset)
+                                                .overlay(alignment: .topTrailing) {
+                                                    Image(systemName: "minus.circle.fill")
+                                                        .foregroundColor(.red)
+                                                        .font(.title3)
+                                                        .background(Circle().fill(.white).padding(1))
+                                                        .padding(4)
+                                                }
+                                                .contextMenu {
+                                                    Button {
+                                                        viewModel.restoreFromTrash(item)
+                                                    } label: {
+                                                        Label("恢复", systemImage: "arrow.uturn.left")
+                                                    }
+                                                    Button(role: .destructive) {
+                                                        Task { await viewModel.confirmDeleteItems([item]) }
+                                                    } label: {
+                                                        Label("立即删除", systemImage: "trash.fill")
                                                     }
                                                 }
                                         }
-                                        .contextMenu {
-                                            Button {
-                                                Task { await viewModel.recoverAsset(item.asset) }
-                                            } label: {
-                                                Label("恢复照片", systemImage: "arrow.uturn.left")
-                                            }
-                                            Button(role: .destructive) {
-                                                Task { await viewModel.permanentDelete([item.asset]) }
-                                            } label: {
-                                                Label("永久删除", systemImage: "trash.fill")
-                                            }
-                                        }
+                                    }
+                                    .padding(.horizontal)
                                 }
                             }
-                            .padding(.horizontal)
                         }
+                        .padding(.vertical)
                     }
                 }
             }
             .navigationTitle("回收站")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("完成") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    if !deletedItems.isEmpty {
-                        Menu {
-                            Button(role: .destructive) {
-                                Task { await viewModel.permanentDelete(deletedItems.map { $0.asset }) }
+                    if !viewModel.trashGroups.isEmpty {
+                        HStack(spacing: 16) {
+                            Button {
+                                viewModel.restoreAllFromTrash()
                             } label: {
-                                Label("清空回收站", systemImage: "trash.fill")
+                                Label("全部恢复", systemImage: "arrow.uturn.left.circle")
+                                    .font(.subheadline)
                             }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
+                            
+                            Button(role: .destructive) {
+                                viewModel.showConfirmDeleteAlert = true
+                            } label: {
+                                Label("全部删除", systemImage: "trash.fill")
+                                    .font(.subheadline)
+                            }
                         }
                     }
                 }
             }
-            .task {
-                deletedItems = await PhotoLibraryService.shared.fetchDeletedPhotos()
-                isLoading = false
-            }
-            .refreshable {
-                deletedItems = await PhotoLibraryService.shared.fetchDeletedPhotos()
-            }
-            .alert("提示", isPresented: $viewModel.showRecoveryAlert) {
-                Button("去相册恢复") {
-                    if let url = URL(string: "photos-redirect://recover") {
-                        UIApplication.shared.open(url)
-                    } else {
-                        UIApplication.shared.open(URL(string: "photos-redirect://")!)
-                    }
+            .alert("确认删除", isPresented: $viewModel.showConfirmDeleteAlert) {
+                Button("取消", role: .cancel) {}
+                Button("删除", role: .destructive) {
+                    Task { await viewModel.confirmDeleteAllTrash() }
                 }
-                Button("知道了", role: .cancel) {}
             } message: {
-                Text("由于系统限制，请在系统「照片」App 的「最近删除」中恢复照片。照片将在30天后自动永久删除。")
+                Text("确定要删除回收站中的 \(viewModel.totalTrashCount) 张照片吗？此操作不可撤销。")
+            }
+            .alert("删除完成", isPresented: $viewModel.showDeleteSuccessAlert) {
+                Button("好的") {}
+            } message: {
+                Text("已成功删除 \(viewModel.deletedCount) 张照片")
             }
         }
-    }
-    
-    private func formatRemainingDays(_ date: Date) -> String {
-        let remaining = 30 - Calendar.current.dateComponents([.day], from: date, to: Date()).day!
-        return "剩余 \(max(0, remaining)) 天"
-    }
-    
-    private func recoverAll() {
-        viewModel.showRecoveryAlert = true
     }
 }
