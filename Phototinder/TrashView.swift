@@ -59,14 +59,14 @@ struct TrashView: View {
                         Label("全部恢复", systemImage: "arrow.uturn.left")
                             .font(.subheadline)
                     }
-                    
+
                     Button {
                         isEditMode = true
                     } label: {
                         Label("选择", systemImage: "checkmark.circle")
                             .font(.subheadline)
                     }
-                    
+
                     Button(role: .destructive) {
                         showConfirmDeleteAlert = true
                     } label: {
@@ -76,7 +76,6 @@ struct TrashView: View {
                 }
             }
         }
-        // 大图查看
         .navigationDestination(item: $selectedItem) { item in
             TrashDetailView(
                 item: item,
@@ -123,6 +122,18 @@ struct TrashView: View {
                         .overlay(alignment: .topLeading) {
                             if isEditMode { checkBadge(item) }
                         }
+                        // Live Photo 小标记
+                        .overlay(alignment: .topTrailing) {
+                            if !isEditMode && item.asset.mediaSubtypes.contains(.photoLive) {
+                                Text("LIVE")
+                                    .font(.system(size: 8, weight: .black))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(.black.opacity(0.4)))
+                                    .padding(4)
+                            }
+                        }
                         .overlay {
                             if isEditMode && selectedIds.contains(item.id) {
                                 Color.blue.opacity(0.3)
@@ -149,11 +160,12 @@ struct TrashView: View {
                 }
             }
             .padding()
-            
-            // 统计信息栏
+            .frame(maxWidth: 600) // iPhone Air 适配
+
             statsBar
                 .padding(.horizontal)
                 .padding(.vertical, 16)
+                .frame(maxWidth: 600)
         }
     }
 
@@ -170,9 +182,9 @@ struct TrashView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Button(role: .destructive) {
                     showConfirmDeleteAlert = true
                 } label: {
@@ -187,7 +199,7 @@ struct TrashView: View {
                     .background(Color.red.gradient, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                
+
                 Button {
                     viewModel.restoreAllFromTrash()
                 } label: {
@@ -251,94 +263,7 @@ struct TrashView: View {
     }
 }
 
-// MARK: - ZoomableImageView（回收站大图查看 — 自由缩放）
-
-struct ZoomableImageView: View {
-    let image: UIImage
-    @State private var scale: CGFloat = 1.0
-    @State private var lastScale: CGFloat = 1.0
-    @State private var translation: CGSize = .zero
-    @State private var lastTranslation: CGSize = .zero
-
-    /// 计算图片在容器内的基础显示尺寸（fit 模式）
-    private func fittedSize(in container: CGSize) -> CGSize {
-        let imgAspect = image.size.width / image.size.height
-        let boxAspect = container.width / container.height
-
-        if imgAspect > boxAspect {
-            return CGSize(width: container.width, height: container.width / imgAspect)
-        } else {
-            return CGSize(width: container.height * imgAspect, height: container.height)
-        }
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            let baseSize = fittedSize(in: geo.size)
-
-            Image(uiImage: image)
-                .resizable()
-                .frame(width: baseSize.width, height: baseSize.height)
-                .scaleEffect(scale, anchor: .center)
-                .offset(x: translation.width, y: translation.height)
-                .gesture(magnificationGesture)
-                .simultaneousGesture(dragGesture)
-                .onTapGesture(count: 2) {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        resetZoom()
-                    }
-                }
-                .animation(.spring(response: 0.2, dampingFraction: 0.85), value: scale)
-                .animation(.easeInOut(duration: 0.15), value: translation)
-        }
-    }
-
-    // MARK: - 手势
-
-    private var magnificationGesture: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                let newScale = lastScale * value
-                scale = min(max(newScale, 1.0), 10.0)
-            }
-            .onEnded { _ in
-                if scale < 1.05 {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        resetZoom()
-                    }
-                } else {
-                    lastScale = scale
-                    lastTranslation = translation
-                }
-            }
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                if scale > 1.02 {
-                    translation = CGSize(
-                        width: lastTranslation.width + value.translation.width,
-                        height: lastTranslation.height + value.translation.height
-                    )
-                }
-            }
-            .onEnded { _ in
-                if scale > 1.02 {
-                    lastTranslation = translation
-                }
-            }
-    }
-
-    private func resetZoom() {
-        scale = 1.0
-        lastScale = 1.0
-        translation = .zero
-        lastTranslation = .zero
-    }
-}
-
-// MARK: - 回收站详情页
+// MARK: - 回收站详情页（支持 Live Photo 长按播放，无缩放）
 
 struct TrashDetailView: View {
     let item: PhotoItem
@@ -347,6 +272,9 @@ struct TrashDetailView: View {
 
     @State private var image: UIImage?
     @State private var loadFailed = false
+    @State private var livePhotoView: PHLivePhotoView?
+    @State private var isLivePhoto = false
+    @State private var isPlayingLive = false
 
     private let sizes: [CGSize] = [
         CGSize(width: 1500, height: 2000),
@@ -359,22 +287,48 @@ struct TrashDetailView: View {
             Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // 照片区域（占据主要空间）
-                if let ui = image {
-                    ZoomableImageView(image: ui)
-                } else if loadFailed {
-                    errorContent
-                } else {
-                    ProgressView().controlSize(.large).tint(.white)
+                // 照片区域
+                ZStack {
+                    if isLivePhoto, let livePhotoView {
+                        LivePhotoViewRepresentable(livePhotoView: livePhotoView, isPlaying: $isPlayingLive)
+                    } else if let ui = image {
+                        Image(uiImage: ui)
+                            .resizable()
+                            .scaledToFit()
+                    } else if loadFailed {
+                        errorContent
+                    } else {
+                        ProgressView().controlSize(.large).tint(.white)
+                    }
+
+                    // LIVE 标记
+                    if isLivePhoto {
+                        VStack {
+                            HStack {
+                                liveBadge
+                                Spacer()
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                    }
                 }
-                
+                .frame(maxHeight: .infinity)
+                // 长按播放 Live Photo
+                .onLongPressGesture(minimumDuration: 0.1) {
+                    if isLivePhoto { isPlayingLive = true }
+                } onPressingChanged: { pressing in
+                    if !pressing && isPlayingLive { isPlayingLive = false }
+                }
+
                 // 照片信息面板
-                if let ui = image {
+                if image != nil || isLivePhoto {
                     PhotoInfoPanel(asset: item.asset)
                         .padding(.horizontal)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
+            .frame(maxWidth: 600) // iPhone Air 适配
         }
         .navigationTitle("照片详情")
         .navigationBarTitleDisplayMode(.inline)
@@ -398,9 +352,60 @@ struct TrashDetailView: View {
         .task(id: item.id) {
             image = nil
             loadFailed = false
-            let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
-            if let result { image = result }
-            else { loadFailed = true }
+            isLivePhoto = item.asset.mediaSubtypes.contains(.photoLive)
+
+            if isLivePhoto {
+                loadLivePhoto()
+            } else {
+                let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
+                if let result { image = result }
+                else { loadFailed = true }
+            }
+        }
+    }
+
+    // MARK: - LIVE 标记
+
+    private var liveBadge: some View {
+        Text("LIVE")
+            .font(.system(size: 11, weight: .black, design: .rounded))
+            .tracking(1.2)
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(.black.opacity(0.5))
+                    .blur(radius: 1)
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
+            )
+    }
+
+    // MARK: - 加载 Live Photo
+
+    private func loadLivePhoto() {
+        let targetSize = CGSize(width: 1024, height: 1024)
+        let options = PHLivePhotoRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
+
+        PHImageManager.default().requestLivePhoto(
+            for: item.asset,
+            targetSize: targetSize,
+            contentMode: .aspectFit,
+            options: options
+        ) { livePhoto, _ in
+            guard let livePhoto else { return }
+            DispatchQueue.main.async {
+                let view = PHLivePhotoView()
+                view.contentMode = .scaleAspectFit
+                view.livePhoto = livePhoto
+                view.isMuted = true
+                self.livePhotoView = view
+            }
         }
     }
 

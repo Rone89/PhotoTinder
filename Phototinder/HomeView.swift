@@ -64,6 +64,7 @@ struct HomeView: View {
             }
         }
         .background(Color(.systemBackground).clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.06), radius: 8))
+        .frame(maxWidth: 600) // iPhone Air 适配
     }
 
     private func statBox(_ title: String, _ value: String, _ icon: String, _ color: Color) -> some View {
@@ -103,5 +104,6 @@ struct HomeView: View {
         .buttonStyle(.plain)
         .disabled(viewModel.isLoading)
         .opacity(viewModel.isLoading ? 0.6 : 1.0)
+        .frame(maxWidth: 600) // iPhone Air 适配
     }
 }

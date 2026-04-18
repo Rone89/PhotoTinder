@@ -28,7 +28,6 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // 内容区域
             Group {
                 switch selectedTab {
                 case .home:
@@ -90,6 +89,7 @@ struct MainTabView: View {
             }
         }
         .padding(.horizontal, 40)
+        .frame(maxWidth: 600) // iPhone Air 适配
         .background(
             Capsule()
                 .fill(.ultraThinMaterial)
@@ -112,6 +112,7 @@ struct MainTabView: View {
                     statsSection
                         .padding(.horizontal, 24)
                         .padding(.bottom, 20)
+                        .frame(maxWidth: 600)
                 }
 
                 Spacer()
@@ -119,6 +120,7 @@ struct MainTabView: View {
                 startButton
                     .padding(.horizontal, 40)
                     .padding(.bottom, 16)
+                    .frame(maxWidth: 600)
 
                 Spacer()
             }

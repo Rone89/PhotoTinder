@@ -1,6 +1,5 @@
 import Foundation
 import Photos
-import CoreLocation
 import UIKit
 
 enum ReviewStatus {
@@ -30,7 +29,7 @@ struct PhotoMetadata: Sendable {
     let pixelHeight: Int
     let fileSize: String?
     let deviceName: String?
-    let duration: String?
+    let isLivePhoto: Bool
 }
 
 extension PhotoMetadata {
@@ -43,7 +42,7 @@ extension PhotoMetadata {
             pixelHeight: asset.pixelHeight,
             fileSize: formatFileSize(asset),
             deviceName: nil,
-            duration: asset.mediaType == .video ? formatDuration(asset.duration) : nil
+            isLivePhoto: asset.mediaSubtypes.contains(.photoLive)
         )
     }
     
@@ -62,12 +61,6 @@ extension PhotoMetadata {
         } else {
             return String(format: "%.1fM px", Double(pixels) / 1_000_000.0)
         }
-    }
-    
-    private static func formatDuration(_ seconds: TimeInterval) -> String? {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return "\(mins):\(String(format: "%02d", secs))"
     }
 }
 
