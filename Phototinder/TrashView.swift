@@ -11,7 +11,8 @@ struct TrashView: View {
     @State private var isEditMode = false
     @State private var selectedIds: Set<String> = []
 
-    let columns = [GridItem(.adaptive(minimum: 90), spacing: 2)]
+    /// 固定 3 列网格
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 3)
 
     private var trashItems: [PhotoItem] { viewModel.allDeletedPhotos }
 
@@ -113,13 +114,14 @@ struct TrashView: View {
         }
     }
 
-    // MARK: - 照片网格
+    // MARK: - 照片网格（1:1 缩略图，固定 3 列）
 
     private var trashGrid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 2) {
+            LazyVGrid(columns: columns, spacing: 3) {
                 ForEach(trashItems) { item in
                     MiniThumbnail(asset: item.asset)
+                        .aspectRatio(1, contentMode: .fit)
                         .overlay(alignment: .topLeading) {
                             if isEditMode { checkBadge(item) }
                         }
@@ -160,13 +162,11 @@ struct TrashView: View {
                         }
                 }
             }
-            .padding()
-            .frame(maxWidth: 600) // iPhone Air 适配
+            .padding(.horizontal, 12)
 
             statsBar
-                .padding(.horizontal)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 16)
-                .frame(maxWidth: 600)
         }
     }
 
@@ -264,7 +264,7 @@ struct TrashView: View {
     }
 }
 
-// MARK: - 回收站详情页（支持 Live Photo 长按播放，无缩放）
+// MARK: - 回收站详情页（照片比例自动调整，无白边）
 
 struct TrashDetailView: View {
     let item: PhotoItem
@@ -277,6 +277,14 @@ struct TrashDetailView: View {
     @State private var isLivePhoto = false
     @State private var isPlayingLive = false
 
+    /// 根据照片像素计算宽高比
+    private var photoAspectRatio: CGFloat {
+        let w = CGFloat(item.asset.pixelWidth)
+        let h = CGFloat(item.asset.pixelHeight)
+        guard w > 0, h > 0 else { return 3.0 / 4.0 }
+        return w / h
+    }
+
     private let sizes: [CGSize] = [
         CGSize(width: 1500, height: 2000),
         PHImageManagerMaximumSize,
@@ -288,48 +296,17 @@ struct TrashDetailView: View {
             Color.black.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // 照片区域
-                ZStack {
-                    if isLivePhoto, let livePhotoView {
-                        LivePhotoViewRepresentable(livePhotoView: livePhotoView, isPlaying: $isPlayingLive)
-                    } else if let ui = image {
-                        Image(uiImage: ui)
-                            .resizable()
-                            .scaledToFit()
-                    } else if loadFailed {
-                        errorContent
-                    } else {
-                        ProgressView().controlSize(.large).tint(.white)
-                    }
-
-                    // LIVE 标记
-                    if isLivePhoto {
-                        VStack {
-                            HStack {
-                                liveBadge
-                                Spacer()
-                            }
-                            Spacer()
-                        }
-                        .padding(12)
-                    }
-                }
-                .frame(maxHeight: .infinity)
-                // 长按播放 Live Photo
-                .onLongPressGesture(minimumDuration: 0.1) {
-                    if isLivePhoto { isPlayingLive = true }
-                } onPressingChanged: { pressing in
-                    if !pressing && isPlayingLive { isPlayingLive = false }
-                }
+                // 照片区域（根据比例自动调整，无白边）
+                photoArea
+                    .frame(maxHeight: .infinity)
 
                 // 照片信息面板
                 if image != nil || isLivePhoto {
                     PhotoInfoPanel(asset: item.asset)
-                        .padding(.horizontal)
+                        .padding(.horizontal, 16)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-            .frame(maxWidth: 600) // iPhone Air 适配
         }
         .navigationTitle("照片详情")
         .navigationBarTitleDisplayMode(.inline)
@@ -362,6 +339,45 @@ struct TrashDetailView: View {
                 if let result { image = result }
                 else { loadFailed = true }
             }
+        }
+    }
+
+    // MARK: - 照片区域
+
+    private var photoArea: some View {
+        ZStack {
+            if isLivePhoto, let livePhotoView {
+                LivePhotoViewRepresentable(livePhotoView: livePhotoView, isPlaying: $isPlayingLive)
+            } else if let ui = image {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFit()
+            } else if loadFailed {
+                errorContent
+            } else {
+                ProgressView().controlSize(.large).tint(.white)
+            }
+
+            // LIVE 标记
+            if isLivePhoto {
+                VStack {
+                    HStack {
+                        liveBadge
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(12)
+            }
+        }
+        // 关键：只设 aspectRatio，不设 frame(maxWidth/Height: .infinity)
+        // 照片区域大小完全匹配照片比例，无白边
+        .aspectRatio(photoAspectRatio, contentMode: .fit)
+        // 长按播放 Live Photo
+        .onLongPressGesture(minimumDuration: 0.1) {
+            if isLivePhoto { isPlayingLive = true }
+        } onPressingChanged: { pressing in
+            if !pressing && isPlayingLive { isPlayingLive = false }
         }
     }
 

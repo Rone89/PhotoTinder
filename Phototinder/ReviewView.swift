@@ -167,39 +167,36 @@ struct ReviewView: View {
         }
     }
 
-    // MARK: - 主内容区（无缩放，支持 Live Photo）
+    // MARK: - 主内容区
 
     @ViewBuilder
     private func mainContent(photo: PhotoItem) -> some View {
-        GeometryReader { geo in
-            VStack(spacing: 0) {
-                // 进度条
-                progressBar
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+        VStack(spacing: 0) {
+            // 进度条
+            progressBar
+                .padding(.horizontal)
+                .padding(.top, 8)
 
-                // 照片卡片区
-                ZStack {
-                    PhotoCardView(item: photo)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .id(photo.id)
-                        .offset(x: dragOffset.width, y: dragOffset.height)
-                        .rotationEffect(.degrees(Double(dragOffset.width) / 25.0))
-                        .gesture(cardDragGesture)
-                        .overlay(alignment: .center) { swipeOverlay }
-                }
-
-                // 照片信息面板
-                PhotoInfoPanel(asset: photo.asset)
+            // 照片卡片区（根据照片比例自动调整，填充可用空间）
+            ZStack {
+                PhotoCardView(item: photo)
                     .padding(.horizontal, 16)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                // 操作按钮行
-                buttonsRow
-                    .padding(.bottom, safeBottomInset + 8)
+                    .padding(.vertical, 8)
+                    .id(photo.id)
+                    .offset(x: dragOffset.width, y: dragOffset.height)
+                    .rotationEffect(.degrees(Double(dragOffset.width) / 25.0))
+                    .gesture(cardDragGesture)
+                    .overlay(alignment: .center) { swipeOverlay }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // 照片信息面板
+            PhotoInfoPanel(asset: photo.asset)
+                .padding(.horizontal, 16)
+
+            // 操作按钮行
+            buttonsRow
+                .padding(.bottom, safeBottomInset + 8)
         }
     }
 
@@ -340,13 +337,21 @@ struct ReviewView: View {
     }
 }
 
-// MARK: - PhotoCardView（审查界面照片卡片，支持 Live Photo 长按播放）
+// MARK: - PhotoCardView（审查界面照片卡片，根据照片比例自动调整，无白边）
 
 struct PhotoCardView: View {
     let item: PhotoItem
     @State private var livePhotoView: PHLivePhotoView?
     @State private var isLivePhoto = false
     @State private var isPlayingLive = false
+
+    /// 根据照片像素计算宽高比
+    private var photoAspectRatio: CGFloat {
+        let w = CGFloat(item.asset.pixelWidth)
+        let h = CGFloat(item.asset.pixelHeight)
+        guard w > 0, h > 0 else { return 3.0 / 4.0 }
+        return w / h
+    }
 
     var body: some View {
         ZStack {
@@ -370,14 +375,15 @@ struct PhotoCardView: View {
                 .padding(12)
             }
         }
-        .frame(maxWidth: 560) // iPhone Air 适配：限制最大宽度
-        .frame(maxHeight: .infinity)
+        // 关键：只设 aspectRatio，不设 frame(maxWidth/Height: .infinity)
+        // 这样卡片大小完全匹配照片比例，不会有多余白边
+        .aspectRatio(photoAspectRatio, contentMode: .fit)
         .background(
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.systemGray6))
                 .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .task(id: item.id) {
             isLivePhoto = item.asset.mediaSubtypes.contains(.photoLive)
             if isLivePhoto {
@@ -442,7 +448,7 @@ struct PhotoCardView: View {
     }
 }
 
-// MARK: - StaticPhotoView（普通静态照片，无缩放）
+// MARK: - StaticPhotoView（普通静态照片）
 
 struct StaticPhotoView: View {
     let item: PhotoItem

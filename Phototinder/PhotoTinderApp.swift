@@ -26,17 +26,21 @@ struct MainTabView: View {
         case trash = "回收站"
     }
 
+    private let slideOffset: CGFloat = 1000
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            Group {
-                switch selectedTab {
-                case .home:
-                    homeContent
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                case .trash:
-                    trashContent
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
-                }
+            // 内容切换（滑动 + 淡入淡出）
+            ZStack {
+                homeContent
+                    .offset(x: selectedTab == .home ? 0 : -slideOffset)
+                    .opacity(selectedTab == .home ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .home)
+
+                trashContent
+                    .offset(x: selectedTab == .trash ? 0 : slideOffset)
+                    .opacity(selectedTab == .trash ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .trash)
             }
             .animation(.easeInOut(duration: 0.25), value: selectedTab)
 
@@ -70,7 +74,7 @@ struct MainTabView: View {
                             viewModel.isReviewing = false
                         }
                     } else {
-                        withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab }
+                        withAnimation(.easeInOut(duration: 0.25)) { selectedTab = tab }
                     }
                 } label: {
                     VStack(spacing: 4) {
@@ -89,7 +93,6 @@ struct MainTabView: View {
             }
         }
         .padding(.horizontal, 40)
-        .frame(maxWidth: 600) // iPhone Air 适配
         .background(
             Capsule()
                 .fill(.ultraThinMaterial)
@@ -112,7 +115,6 @@ struct MainTabView: View {
                     statsSection
                         .padding(.horizontal, 24)
                         .padding(.bottom, 20)
-                        .frame(maxWidth: 600)
                 }
 
                 Spacer()
@@ -120,7 +122,6 @@ struct MainTabView: View {
                 startButton
                     .padding(.horizontal, 40)
                     .padding(.bottom, 16)
-                    .frame(maxWidth: 600)
 
                 Spacer()
             }
@@ -154,12 +155,14 @@ struct MainTabView: View {
         }
     }
 
-    // MARK: - Stats
+    // MARK: - Stats（4 格：已审查 / 已清理 / 待删除 / 已保留）
 
     private var statsSection: some View {
         VStack(spacing: 12) {
             HStack(spacing: 0) {
                 statBox("已审查", "\(viewModel.totalReviewed)", "checkmark.circle", .green)
+                Divider().frame(height: 50).padding(.vertical, 6)
+                statBox("已清理", "\(viewModel.totalCleaned)", "trash.fill", .orange)
                 Divider().frame(height: 50).padding(.vertical, 6)
                 statBox("待删除", "\(viewModel.allDeletedPhotos.count)", "trash", .red)
                 Divider().frame(height: 50).padding(.vertical, 6)

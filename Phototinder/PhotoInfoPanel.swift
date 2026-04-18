@@ -44,8 +44,8 @@ struct PhotoInfoPanel: View {
                 .fill(Color(.systemBackground))
                 .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
         )
-        .frame(maxWidth: 600) // iPhone Air 适配
     }
+
 
     // MARK: - 快速预览
 
