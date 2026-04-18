@@ -63,7 +63,7 @@ class PhotoViewModel {
         let allPhotos = PHAsset.fetchAssets(with: .image, options: fetchOptions)
 
         var available: [PHAsset] = []
-        allPhotos.enumerateObjects { asset, _, _ in
+        allPhotos.enumerateObjects { [self] asset, _, _ in
             if !seenAssetIds.contains(asset.localIdentifier) {
                 available.append(asset)
             }
@@ -81,7 +81,7 @@ class PhotoViewModel {
             seenAssetIds.insert(asset.localIdentifier)
         }
 
-        currentPhotos = selected.map { PhotoItem(asset: $0) }
+        currentPhotos = selected.map { PhotoItem(id: $0.localIdentifier, asset: $0) }
         currentIndex = 0
         batchNumber += 1
         isReviewing = true
