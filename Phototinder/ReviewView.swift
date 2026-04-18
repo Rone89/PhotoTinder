@@ -161,15 +161,12 @@ struct ReviewView: View {
 
     private var buttonsRow: some View {
         HStack(spacing: 40) {
-            // 左滑 = 保留
             circleButton(icon: "arrow.left", color: .green, label: "保留") {
                 performSwipe(action: .keep)
             }
-            // 上滑 = 删除
             circleButton(icon: "arrow.up", color: .red, label: "删除") {
                 performSwipe(action: .delete)
             }
-            // 右滑 = 返回上一张
             circleButton(icon: "arrow.right", color: .orange, label: "返回") {
                 performSwipe(action: .goBack)
             }
@@ -204,21 +201,19 @@ struct ReviewView: View {
                 let threshold: CGFloat = 120
                 let dx = value.translation.width
                 let dy = value.translation.height
-
-                // 判断主导方向
                 let isHorizontal = abs(dx) > abs(dy)
 
                 if isHorizontal {
                     if dx < -threshold {
-                        performSwipe(action: .keep)       // 左滑 = 保留
+                        performSwipe(action: .keep)
                     } else if dx > threshold {
-                        performSwipe(action: .goBack)     // 右滑 = 返回
+                        performSwipe(action: .goBack)
                     } else {
                         resetDrag()
                     }
                 } else {
                     if dy < -threshold {
-                        performSwipe(action: .delete)     // 上滑 = 删除
+                        performSwipe(action: .delete)
                     } else {
                         resetDrag()
                     }
@@ -266,6 +261,7 @@ struct ReviewView: View {
 struct PhotoCardView: View {
     let item: PhotoItem
     @State private var image: UIImage?
+    @State private var loadFailed = false
 
     var body: some View {
         RoundedRectangle(cornerRadius: 20)
@@ -276,6 +272,15 @@ struct PhotoCardView: View {
                         .resizable()
                         .scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 20))
+                } else if loadFailed {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.badge.exclamationmark")
+                            .font(.title)
+                            .foregroundColor(.secondary)
+                        Text("无法加载此照片")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 } else {
                     ProgressView()
                         .scaleEffect(1.5)
@@ -291,29 +296,47 @@ struct PhotoCardView: View {
 
     private func loadPhoto() async {
         image = nil
-        let loaded = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.deliveryMode = .highQualityFormat
-                options.resizeMode = .exact
-                options.isSynchronous = true
-                options.version = .current
+        loadFailed = false
 
-                let targetSize = CGSize(width: 1200, height: 1800)
-                var result: UIImage?
-                PHImageManager.default().requestImage(
-                    for: item.asset,
-                    targetSize: targetSize,
-                    contentMode: .aspectFit,
-                    options: options
-                ) { img, _ in
-                    result = img
-                }
-                continuation.resume(returning: result)
-            }
+        // 尝试加载，如果失败则用较小尺寸重试
+        var loaded = await requestImage(for: item.asset, size: CGSize(width: 1200, height: 1800))
+
+        if loaded == nil {
+            // 重试1：使用原始尺寸
+            loaded = await requestImage(for: item.asset, size: PHImageManagerMaximumSize)
         }
-        image = loaded
+
+        if loaded == nil {
+            // 重试2：使用小尺寸
+            loaded = await requestImage(for: item.asset, size: CGSize(width: 400, height: 600))
+        }
+
+        if let loaded = loaded {
+            image = loaded
+        } else {
+            loadFailed = true
+        }
+    }
+
+    private func requestImage(for asset: PHAsset, size: CGSize) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
+            options.isSynchronous = true
+
+            var result: UIImage?
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: size,
+                contentMode: .aspectFit,
+                options: options
+            ) { img, info in
+                result = img
+            }
+            continuation.resume(returning: result)
+        }
     }
 }
 
@@ -346,27 +369,34 @@ struct ThumbnailView: View {
 
     private func loadThumbnail() async {
         image = nil
-        let loaded = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.resizeMode = .exact
-                options.isSynchronous = true
-                options.deliveryMode = .highQualityFormat
 
-                let targetSize = CGSize(width: 200, height: 200)
-                var result: UIImage?
-                PHImageManager.default().requestImage(
-                    for: asset,
-                    targetSize: targetSize,
-                    contentMode: .aspectFill,
-                    options: options
-                ) { img, _ in
-                    result = img
-                }
-                continuation.resume(returning: result)
-            }
+        var loaded = await requestThumb(size: CGSize(width: 200, height: 200))
+
+        if loaded == nil {
+            loaded = await requestThumb(size: CGSize(width: 100, height: 100))
         }
+
         image = loaded
+    }
+
+    private func requestThumb(size: CGSize) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.resizeMode = .exact
+            options.isSynchronous = true
+            options.deliveryMode = .highQualityFormat
+
+            var result: UIImage?
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: size,
+                contentMode: .aspectFill,
+                options: options
+            ) { img, _ in
+                result = img
+            }
+            continuation.resume(returning: result)
+        }
     }
 }
