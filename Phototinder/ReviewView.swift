@@ -133,9 +133,7 @@ struct ReviewView: View {
                     .offset(x: dragOffset.width, y: dragOffset.height)
                     .rotationEffect(.degrees(Double(dragOffset.width) / 25.0))
                     .gesture(cardDragGesture)
-                    .overlay {
-                        swipeOverlay
-                    }
+                    .overlay { swipeOverlay }
             }
         }
     }
@@ -201,22 +199,14 @@ struct ReviewView: View {
                 let threshold: CGFloat = 120
                 let dx = value.translation.width
                 let dy = value.translation.height
-                let isHorizontal = abs(dx) > abs(dy)
 
-                if isHorizontal {
-                    if dx < -threshold {
-                        performSwipe(action: .keep)
-                    } else if dx > threshold {
-                        performSwipe(action: .goBack)
-                    } else {
-                        resetDrag()
-                    }
+                if abs(dx) > abs(dy) {
+                    if dx < -threshold { performSwipe(action: .keep) }
+                    else if dx > threshold { performSwipe(action: .goBack) }
+                    else { resetDrag() }
                 } else {
-                    if dy < -threshold {
-                        performSwipe(action: .delete)
-                    } else {
-                        resetDrag()
-                    }
+                    if dy < -threshold { performSwipe(action: .delete) }
+                    else { resetDrag() }
                 }
             }
     }
@@ -228,63 +218,55 @@ struct ReviewView: View {
     }
 
     private func performSwipe(action: SwipeAction) {
-        let targetOffset: CGSize
+        let target: CGSize
         switch action {
-        case .keep:
-            targetOffset = CGSize(width: -800, height: 0)
-        case .delete:
-            targetOffset = CGSize(width: 0, height: -800)
-        case .goBack:
-            targetOffset = CGSize(width: 800, height: 0)
+        case .keep:  target = CGSize(width: -800, height: 0)
+        case .delete: target = CGSize(width: 0, height: -800)
+        case .goBack: target = CGSize(width: 800, height: 0)
         }
-
-        withAnimation(.easeOut(duration: 0.25)) {
-            dragOffset = targetOffset
-        }
-
+        withAnimation(.easeOut(duration: 0.25)) { dragOffset = target }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             dragOffset = .zero
             switch action {
-            case .keep:
-                viewModel.markAsKeptAndAdvance()
-            case .delete:
-                viewModel.markForDeletionAndGoBack()
-            case .goBack:
-                viewModel.goToPrevious()
+            case .keep:   viewModel.markAsKeptAndAdvance()
+            case .delete: viewModel.markForDeletionAndGoBack()
+            case .goBack: viewModel.goToPrevious()
             }
         }
     }
 }
 
-// MARK: - 图片加载工具函数（避免死锁：后台线程同步请求 + continuation 回到 async）
+// MARK: - PhotoLoader（使用 isSynchronous=false 避免 deadlock）
 
 enum PhotoLoader {
-    static func loadImage(for asset: PHAsset, size: CGSize, contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
+    /// 异步加载单张图片，isSynchronous=false 避免线程死锁
+    static func load(for asset: PHAsset,
+                     size: CGSize,
+                     contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
         await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.deliveryMode = .highQualityFormat
-                options.resizeMode = .exact
-                options.isSynchronous = true
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
+            options.isSynchronous = false
 
-                var result: UIImage?
-                PHImageManager.default().requestImage(
-                    for: asset,
-                    targetSize: size,
-                    contentMode: contentMode,
-                    options: options
-                ) { img, _ in
-                    result = img
-                }
-                continuation.resume(returning: result)
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: size,
+                contentMode: contentMode,
+                options: options
+            ) { image, _ in
+                continuation.resume(returning: image)
             }
         }
     }
 
-    static func loadWithFallback(for asset: PHAsset, sizes: [CGSize], contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
+    /// 逐级降级尝试多种尺寸
+    static func loadWithFallback(for asset: PHAsset,
+                                  sizes: [CGSize],
+                                  contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
         for size in sizes {
-            if let img = await loadImage(for: asset, size: size, contentMode: contentMode) {
+            if let img = await load(for: asset, size: size, contentMode: contentMode) {
                 return img
             }
         }
@@ -292,35 +274,37 @@ enum PhotoLoader {
     }
 }
 
-// MARK: - PhotoCardView（纯展示）
+// MARK: - PhotoCardView
 
 struct PhotoCardView: View {
     let item: PhotoItem
     @State private var image: UIImage?
     @State private var loadFailed = false
 
+    private let sizes: [CGSize] = [
+        CGSize(width: 1200, height: 1800),
+        PHImageManagerMaximumSize,
+        CGSize(width: 400, height: 600)
+    ]
+
     var body: some View {
         RoundedRectangle(cornerRadius: 20)
             .fill(Color(.systemGray6))
             .overlay {
-                if let uiImage = image {
-                    Image(uiImage: uiImage)
+                if let ui = image {
+                    Image(uiImage: ui)
                         .resizable()
                         .scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                 } else if loadFailed {
                     VStack(spacing: 8) {
                         Image(systemName: "photo.badge.exclamationmark")
-                            .font(.title)
-                            .foregroundColor(.secondary)
+                            .font(.title).foregroundColor(.secondary)
                         Text("无法加载此照片")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(.caption).foregroundColor(.secondary)
                     }
                 } else {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .tint(.gray)
+                    ProgressView().scaleEffect(1.5).tint(.gray)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -328,49 +312,37 @@ struct PhotoCardView: View {
             .task(id: item.id) {
                 image = nil
                 loadFailed = false
-                let sizes: [CGSize] = [
-                    CGSize(width: 1200, height: 1800),
-                    PHImageManagerMaximumSize,
-                    CGSize(width: 400, height: 600)
-                ]
                 let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
-                if let result = result {
-                    image = result
-                } else {
-                    loadFailed = true
-                }
+                if let result { image = result }
+                else { loadFailed = true }
             }
     }
 }
 
-// MARK: - ThumbnailView（网格缩略图）
+// MARK: - ThumbnailView
 
 struct ThumbnailView: View {
     let asset: PHAsset
     @State private var image: UIImage?
+
+    private let sizes: [CGSize] = [
+        CGSize(width: 200, height: 200),
+        CGSize(width: 100, height: 100)
+    ]
 
     var body: some View {
         Rectangle()
             .fill(Color(.systemGray5))
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                if let uiImage = image {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .clipped()
+                if let ui = image {
+                    Image(uiImage: ui).resizable().scaledToFill().clipped()
                 } else {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .tint(.gray)
+                    ProgressView().scaleEffect(0.8).tint(.gray)
                 }
             }
             .task(id: asset.localIdentifier) {
                 image = nil
-                let sizes: [CGSize] = [
-                    CGSize(width: 200, height: 200),
-                    CGSize(width: 100, height: 100)
-                ]
                 image = await PhotoLoader.loadWithFallback(for: asset, sizes: sizes, contentMode: .aspectFill)
             }
     }
