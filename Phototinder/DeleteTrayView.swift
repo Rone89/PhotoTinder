@@ -1,75 +1,47 @@
 import SwiftUI
-import Photos
 
 struct DeleteTrayView: View {
     @Environment(PhotoViewModel.self) var viewModel
+    @Environment(\.dismiss) var dismiss
+
     let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
+
+    private var deletedItems: [PhotoItem] {
+        viewModel.currentPhotos.filter { $0.status == .delete }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                if let group = viewModel.currentGroup {
-                    let items = group.items.filter { $0.status == .delete }
-                    LazyVGrid(columns: columns, spacing: 2) {
-                        ForEach(items) { item in
-                            ThumbnailView(asset: item.asset)
-                                .overlay(alignment: .topTrailing) {
-                                    Image(systemName: "minus.circle.fill").foregroundColor(.red).background(Circle().fill(.white))
-                                }
-                                .onTapGesture { viewModel.cancelDelete(for: item.id) }
+            Group {
+                if deletedItems.isEmpty {
+                    ContentUnavailableView("暂无待删除照片", systemImage: "trash")
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 2) {
+                            ForEach(deletedItems) { item in
+                                ThumbnailView(asset: item.asset)
+                                    .overlay(alignment: .topTrailing) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.title3)
+                                            .foregroundColor(.red)
+                                            .background(Circle().fill(.white).padding(1))
+                                            .padding(4)
+                                    }
+                                    .onTapGesture {
+                                        viewModel.cancelDelete(for: item.id)
+                                    }
+                            }
                         }
+                        .padding()
                     }
                 }
             }
-            .navigationTitle("待删除预览")
+            .navigationTitle("待删除 (\(deletedItems.count))")
             .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-}
-
-struct ThumbnailView: View {
-    let asset: PHAsset
-    @State private var image: UIImage?
-    @State private var didLoad = false
-
-    var body: some View {
-        Color.gray.opacity(0.2)
-            .aspectRatio(1, contentMode: .fill)
-            .overlay {
-                if let image = image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
                 }
-            }
-            .clipped()
-            .onAppear {
-                guard !didLoad else { return }
-                didLoad = true
-                loadFileSync()
-            }
-    }
-
-    private func loadFileSync() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
-            options.isSynchronous = true
-
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: CGSize(width: 200, height: 200),
-                contentMode: .aspectFill,
-                options: options
-            ) { img, _ in
-                result = img
-            }
-
-            DispatchQueue.main.async {
-                self.image = result
             }
         }
     }
