@@ -257,7 +257,6 @@ struct TrashDetailView: View {
 
     @Environment(\.dismiss) var dismiss
     @State private var image: UIImage?
-    @State private var isLoading = false
 
     var body: some View {
         ZStack {
@@ -267,7 +266,7 @@ struct TrashDetailView: View {
                     .resizable()
                     .scaledToFit()
                     .padding()
-            } else if isLoading {
+            } else {
                 ProgressView()
                     .scaleEffect(2)
                     .tint(.white)
@@ -294,33 +293,33 @@ struct TrashDetailView: View {
         }
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .onAppear { loadImage() }
+        .task(id: item.id) {
+            await loadImage()
+        }
     }
 
-    private func loadImage() {
-        guard image == nil, !isLoading else { return }
-        isLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
-            options.isSynchronous = true
+    private func loadImage() async {
+        image = nil
+        let loaded = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.deliveryMode = .highQualityFormat
+                options.resizeMode = .exact
+                options.isSynchronous = true
 
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: item.asset,
-                targetSize: CGSize(width: 1500, height: 2000),
-                contentMode: .aspectFit,
-                options: options
-            ) { img, _ in
-                result = img
-            }
-
-            DispatchQueue.main.async {
-                self.image = result
-                self.isLoading = false
+                var result: UIImage?
+                PHImageManager.default().requestImage(
+                    for: item.asset,
+                    targetSize: CGSize(width: 1500, height: 2000),
+                    contentMode: .aspectFit,
+                    options: options
+                ) { img, _ in
+                    result = img
+                }
+                continuation.resume(returning: result)
             }
         }
+        image = loaded
     }
 }
