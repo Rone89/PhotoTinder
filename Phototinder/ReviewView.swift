@@ -229,7 +229,7 @@ struct ReviewView: View {
             dragOffset = .zero
             switch action {
             case .keep:   viewModel.markAsKeptAndAdvance()
-            case .delete: viewModel.markForDeletionAndGoBack()
+            case .delete: viewModel.markForDeletionAndAdvance()
             case .goBack: viewModel.goToPrevious()
             }
         }
@@ -290,6 +290,10 @@ struct PhotoCardView: View {
     let item: PhotoItem
     @State private var image: UIImage?
     @State private var loadFailed = false
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
 
     private let sizes: [CGSize] = [
         CGSize(width: 1200, height: 1800),
@@ -305,7 +309,42 @@ struct PhotoCardView: View {
                     Image(uiImage: ui)
                         .resizable()
                         .scaledToFit()
+                        .scaleEffect(scale)
+                        .offset(offset)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let newScale = lastScale * value
+                                    scale = min(max(newScale, 1.0), 5.0)
+                                }
+                                .onEnded { value in
+                                    if scale < 1.05 {
+                                        withAnimation { resetZoom() }
+                                    } else {
+                                        lastScale = scale
+                                    }
+                                }
+                        )
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    if scale > 1.0 {
+                                        offset = CGSize(
+                                            width: lastOffset.width + value.translation.width,
+                                            height: lastOffset.height + value.translation.height
+                                        )
+                                    }
+                                }
+                                .onEnded { _ in
+                                    if scale > 1.0 {
+                                        lastOffset = offset
+                                    }
+                                }
+                        )
+                        .onTapGesture(count: 2) {
+                            withAnimation { resetZoom() }
+                        }
                 } else if loadFailed {
                     VStack(spacing: 8) {
                         Image(systemName: "photo.badge.exclamationmark")
@@ -322,10 +361,21 @@ struct PhotoCardView: View {
             .task(id: item.id) {
                 image = nil
                 loadFailed = false
+                scale = 1.0
+                lastScale = 1.0
+                offset = .zero
+                lastOffset = .zero
                 let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
                 if let result { image = result }
                 else { loadFailed = true }
             }
+    }
+
+    private func resetZoom() {
+        scale = 1.0
+        lastScale = 1.0
+        offset = .zero
+        lastOffset = .zero
     }
 }
 
