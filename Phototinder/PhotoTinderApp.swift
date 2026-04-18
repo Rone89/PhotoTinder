@@ -15,25 +15,30 @@ struct PhotoTinderApp: App {
     }
 }
 
-// MARK: - 主界面（系统 TabView，自动获得 iOS 26 Liquid Glass 样式）
+// MARK: - 主界面（TabView + tabItem，兼容 iOS 17）
 
 struct MainTabView: View {
     @Environment(PhotoViewModel.self) var viewModel
+    @State private var selectedTab = 0
 
     var body: some View {
         ZStack {
-            TabView {
-                Tab("主页", systemImage: "house.fill") {
-                    NavigationStack {
-                        homeContent
-                    }
+            TabView(selection: $selectedTab) {
+                NavigationStack {
+                    homeContent
                 }
+                .tabItem {
+                    Label("主页", systemImage: "house.fill")
+                }
+                .tag(0)
 
-                Tab("回收站", systemImage: "archivebox.fill") {
-                    NavigationStack {
-                        TrashView()
-                    }
+                NavigationStack {
+                    TrashView()
                 }
+                .tabItem {
+                    Label("回收站", systemImage: "archivebox.fill")
+                }
+                .tag(1)
             }
 
             // 审查界面全屏覆盖（在 TabView 之上，自动遮盖 tab bar）

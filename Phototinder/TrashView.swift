@@ -90,6 +90,7 @@ struct TrashView: View {
                     selectedItem = nil
                 }
             )
+            .toolbar(.hidden, for: .tabBar)
         }
         .alert("确认删除", isPresented: $showConfirmDeleteAlert) {
             Button("取消", role: .cancel) {}
@@ -114,14 +115,15 @@ struct TrashView: View {
         }
     }
 
-    // MARK: - 照片网格（1:1 缩略图，固定 3 列）
+    // MARK: - 照片网格（1:1 缩略图，固定 3 列，填满宽度）
 
     private var trashGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(trashItems) { item in
                     MiniThumbnail(asset: item.asset)
-                        .aspectRatio(1, contentMode: .fill)
+                        .frame(maxWidth: .infinity)  // 填满网格列宽度
+                        .aspectRatio(1, contentMode: .fit)
                         .clipped()
                         .overlay(alignment: .topLeading) {
                             if isEditMode { checkBadge(item) }
@@ -163,7 +165,7 @@ struct TrashView: View {
                         }
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 2)  // 最小边距，让缩略图尽量大
 
             statsBar
                 .padding(.horizontal, 16)
