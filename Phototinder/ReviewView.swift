@@ -493,9 +493,7 @@ struct LivePhotoViewRepresentable: UIViewRepresentable {
     @Binding var isPlaying: Bool
 
     func makeUIView(context: Context) -> PHLivePhotoView {
-        let view = livePhotoView
-        view.playbackStyle = .full
-        return view
+        livePhotoView
     }
 
     func updateUIView(_ uiView: PHLivePhotoView, context: Context) {
