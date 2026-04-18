@@ -72,7 +72,9 @@ struct PhotoCardView: View {
                 else { withAnimation(.spring()) { offset = .zero } }
             })
             .onAppear {
-                PHImageManager.default().requestImage(for: item.asset, targetSize: CGSize(width: 800, height: 1200), contentMode: .aspectFill, options: nil) { self.image = $0 }
+                PHImageManager.default().requestImage(for: item.asset, targetSize: CGSize(width: 800, height: 1200), contentMode: .aspectFill, options: nil) { image, _ in
+                    self.image = image
+                }
             }
         }
     }
