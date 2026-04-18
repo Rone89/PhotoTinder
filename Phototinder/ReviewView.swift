@@ -3,7 +3,7 @@ import Photos
 
 struct ReviewView: View {
     @Environment(PhotoViewModel.self) var viewModel
-    @State private var dragOffset: CGFloat = 0
+    @State private var dragOffset: CGSize = .zero
     @State private var showDeleteTray = false
     @State private var showTrashView = false
 
@@ -127,45 +127,33 @@ struct ReviewView: View {
 
     private var cardArea: some View {
         ZStack {
-            if viewModel.currentIndex + 1 < viewModel.currentPhotos.count {
-                behindCard
-            }
             if let photo = viewModel.currentPhoto {
-                frontCard(photo)
+                PhotoCardView(item: photo)
+                    .id(photo.id)
+                    .offset(x: dragOffset.width, y: dragOffset.height)
+                    .rotationEffect(.degrees(Double(dragOffset.width) / 25.0))
+                    .gesture(cardDragGesture)
+                    .overlay {
+                        swipeOverlay
+                    }
             }
         }
     }
 
-    private var behindCard: some View {
-        let item = viewModel.currentPhotos[viewModel.currentIndex + 1]
-        return PhotoCardView(item: item)
-            .id(item.id)
-            .scaleEffect(0.9)
-            .offset(y: 12)
-            .opacity(0.5)
-    }
-
-    private func frontCard(_ item: PhotoItem) -> some View {
-        PhotoCardView(item: item)
-            .id(item.id)
-            .offset(x: dragOffset)
-            .rotationEffect(.degrees(Double(dragOffset) / 25.0))
-            .gesture(cardDragGesture)
-            .overlay {
-                swipeOverlay
-            }
-    }
-
     private var swipeOverlay: some View {
         Group {
-            if dragOffset > 50 {
-                Text("保留")
+            if dragOffset.width < -80 {
+                Text("✓ 保留")
                     .font(.largeTitle.bold())
-                    .foregroundColor(.green.opacity(0.6))
-            } else if dragOffset < -50 {
-                Text("删除")
+                    .foregroundColor(.green.opacity(0.7))
+            } else if dragOffset.width > 80 {
+                Text("← 返回")
                     .font(.largeTitle.bold())
-                    .foregroundColor(.red.opacity(0.6))
+                    .foregroundColor(.orange.opacity(0.7))
+            } else if dragOffset.height < -80 {
+                Text("✕ 删除")
+                    .font(.largeTitle.bold())
+                    .foregroundColor(.red.opacity(0.7))
             }
         }
         .allowsHitTesting(false)
@@ -173,14 +161,17 @@ struct ReviewView: View {
 
     private var buttonsRow: some View {
         HStack(spacing: 40) {
-            circleButton(icon: "arrow.uturn.left", color: .orange, label: "撤销") {
-                viewModel.undoLastSwipe()
+            // 左滑 = 保留
+            circleButton(icon: "arrow.left", color: .green, label: "保留") {
+                performSwipe(action: .keep)
             }
-            circleButton(icon: "checkmark.circle", color: .green, label: "保留") {
-                performSwipe(isKeep: true)
+            // 上滑 = 删除
+            circleButton(icon: "arrow.up", color: .red, label: "删除") {
+                performSwipe(action: .delete)
             }
-            circleButton(icon: "trash", color: .red, label: "删除") {
-                performSwipe(isKeep: false)
+            // 右滑 = 返回上一张
+            circleButton(icon: "arrow.right", color: .orange, label: "返回") {
+                performSwipe(action: .goBack)
             }
         }
         .padding(.top, 8)
@@ -202,46 +193,79 @@ struct ReviewView: View {
 
     // MARK: - 手势
 
+    private enum SwipeAction { case keep, delete, goBack }
+
     private var cardDragGesture: some Gesture {
         DragGesture(minimumDistance: 20)
             .onChanged { value in
-                dragOffset = value.translation.width
+                dragOffset = value.translation
             }
             .onEnded { value in
                 let threshold: CGFloat = 120
-                if value.translation.width > threshold {
-                    performSwipe(isKeep: true)
-                } else if value.translation.width < -threshold {
-                    performSwipe(isKeep: false)
+                let dx = value.translation.width
+                let dy = value.translation.height
+
+                // 判断主导方向
+                let isHorizontal = abs(dx) > abs(dy)
+
+                if isHorizontal {
+                    if dx < -threshold {
+                        performSwipe(action: .keep)       // 左滑 = 保留
+                    } else if dx > threshold {
+                        performSwipe(action: .goBack)     // 右滑 = 返回
+                    } else {
+                        resetDrag()
+                    }
                 } else {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        dragOffset = 0
+                    if dy < -threshold {
+                        performSwipe(action: .delete)     // 上滑 = 删除
+                    } else {
+                        resetDrag()
                     }
                 }
             }
     }
 
-    private func performSwipe(isKeep: Bool) {
-        withAnimation(.easeOut(duration: 0.25)) {
-            dragOffset = isKeep ? 800 : -800
+    private func resetDrag() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            dragOffset = .zero
         }
+    }
+
+    private func performSwipe(action: SwipeAction) {
+        let targetOffset: CGSize
+        switch action {
+        case .keep:
+            targetOffset = CGSize(width: -800, height: 0)
+        case .delete:
+            targetOffset = CGSize(width: 0, height: -800)
+        case .goBack:
+            targetOffset = CGSize(width: 800, height: 0)
+        }
+
+        withAnimation(.easeOut(duration: 0.25)) {
+            dragOffset = targetOffset
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            dragOffset = 0
-            if isKeep {
-                viewModel.markAsKept()
-            } else {
-                viewModel.markForDeletion()
+            dragOffset = .zero
+            switch action {
+            case .keep:
+                viewModel.markAsKeptAndAdvance()
+            case .delete:
+                viewModel.markForDeletionAndGoBack()
+            case .goBack:
+                viewModel.goToPrevious()
             }
         }
     }
 }
 
-// MARK: - PhotoCardView（纯展示，不持有手势和偏移状态）
+// MARK: - PhotoCardView（纯展示）
 
 struct PhotoCardView: View {
     let item: PhotoItem
     @State private var image: UIImage?
-    @State private var isLoading = true
 
     var body: some View {
         RoundedRectangle(cornerRadius: 20)
@@ -252,8 +276,7 @@ struct PhotoCardView: View {
                         .resizable()
                         .scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 20))
-                }
-                if isLoading && image == nil {
+                } else {
                     ProgressView()
                         .scaleEffect(1.5)
                         .tint(.gray)
@@ -261,37 +284,36 @@ struct PhotoCardView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-            .onAppear { loadImage() }
+            .task(id: item.id) {
+                await loadPhoto()
+            }
     }
 
-    private func loadImage() {
-        guard image == nil else { return }
-        isLoading = true
+    private func loadPhoto() async {
+        image = nil
+        let loaded = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.deliveryMode = .highQualityFormat
+                options.resizeMode = .exact
+                options.isSynchronous = true
+                options.version = .current
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
-            options.isSynchronous = true
-            options.version = .current
-
-            let targetSize = CGSize(width: 1200, height: 1800)
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: item.asset,
-                targetSize: targetSize,
-                contentMode: .aspectFit,
-                options: options
-            ) { img, _ in
-                result = img
-            }
-
-            DispatchQueue.main.async {
-                self.image = result
-                self.isLoading = false
+                let targetSize = CGSize(width: 1200, height: 1800)
+                var result: UIImage?
+                PHImageManager.default().requestImage(
+                    for: item.asset,
+                    targetSize: targetSize,
+                    contentMode: .aspectFit,
+                    options: options
+                ) { img, _ in
+                    result = img
+                }
+                continuation.resume(returning: result)
             }
         }
+        image = loaded
     }
 }
 
@@ -300,7 +322,6 @@ struct PhotoCardView: View {
 struct ThumbnailView: View {
     let asset: PHAsset
     @State private var image: UIImage?
-    @State private var didLoad = false
 
     var body: some View {
         Rectangle()
@@ -312,36 +333,40 @@ struct ThumbnailView: View {
                         .resizable()
                         .scaledToFill()
                         .clipped()
+                } else {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .tint(.gray)
                 }
             }
-            .onAppear { loadImage() }
+            .task(id: asset.localIdentifier) {
+                await loadThumbnail()
+            }
     }
 
-    private func loadImage() {
-        guard !didLoad else { return }
-        didLoad = true
+    private func loadThumbnail() async {
+        image = nil
+        let loaded = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.resizeMode = .exact
+                options.isSynchronous = true
+                options.deliveryMode = .highQualityFormat
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.resizeMode = .exact
-            options.isSynchronous = true
-            options.deliveryMode = .highQualityFormat
-
-            let targetSize = CGSize(width: 200, height: 200)
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: targetSize,
-                contentMode: .aspectFill,
-                options: options
-            ) { img, _ in
-                result = img
-            }
-
-            DispatchQueue.main.async {
-                self.image = result
+                let targetSize = CGSize(width: 200, height: 200)
+                var result: UIImage?
+                PHImageManager.default().requestImage(
+                    for: asset,
+                    targetSize: targetSize,
+                    contentMode: .aspectFill,
+                    options: options
+                ) { img, _ in
+                    result = img
+                }
+                continuation.resume(returning: result)
             }
         }
+        image = loaded
     }
 }
