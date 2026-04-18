@@ -30,12 +30,32 @@ struct DeleteTrayView: View {
 struct ThumbnailView: View {
     let asset: PHAsset
     @State private var image: UIImage?
+    @State private var didLoad = false
+    
     var body: some View {
-        Color.gray.opacity(0.2).aspectRatio(1, contentMode: .fill)
-            .overlay { if let image = image { Image(uiImage: image).resizable().scaledToFill() } }
+        Color.gray.opacity(0.2)
+            .aspectRatio(1, contentMode: .fill)
+            .overlay {
+                if let image = image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
             .clipped()
             .onAppear {
-                PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 200, height: 200), contentMode: .aspectFill, options: nil) { image, _ in
+                guard !didLoad else { return }
+                didLoad = true
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.deliveryMode = .highQualityFormat
+                options.resizeMode = .exact
+                PHImageManager.default().requestImage(
+                    for: asset,
+                    targetSize: CGSize(width: 200, height: 200),
+                    contentMode: .aspectFill,
+                    options: options
+                ) { image, _ in
                     self.image = image
                 }
             }
