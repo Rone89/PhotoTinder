@@ -93,7 +93,8 @@ class PhotoViewModel {
 
     // MARK: - 滑动操作
 
-    func markAsKept() {
+    /// 左滑 = 保留，前进到下一张
+    func markAsKeptAndAdvance() {
         guard let photo = currentPhoto else { return }
         if let idx = currentPhotos.firstIndex(where: { $0.id == photo.id }) {
             currentPhotos[idx].status = .keep
@@ -103,7 +104,8 @@ class PhotoViewModel {
         advanceCard()
     }
 
-    func markForDeletion() {
+    /// 上滑 = 删除，返回上一张
+    func markForDeletionAndGoBack() {
         guard let photo = currentPhoto else { return }
         if let idx = currentPhotos.firstIndex(where: { $0.id == photo.id }) {
             currentPhotos[idx].status = .delete
@@ -112,7 +114,7 @@ class PhotoViewModel {
             allDeletedPhotos.append(photo)
         }
         totalReviewed += 1
-        advanceCard()
+        goBack()
     }
 
     private func advanceCard() {
@@ -122,22 +124,28 @@ class PhotoViewModel {
         }
     }
 
-    func undoLastSwipe() {
+    /// 右滑 = 返回上一张（不修改状态）
+    func goToPrevious() {
         guard currentIndex > 0 else { return }
-        let prevIndex = currentIndex - 1
-        let prevStatus = currentPhotos[prevIndex].status
-        currentPhotos[prevIndex].status = .unreviewed
+        currentIndex -= 1
+    }
 
-        if prevStatus == .delete {
-            allDeletedPhotos.removeAll { $0.id == currentPhotos[prevIndex].id }
-        }
-        if prevStatus == .keep {
-            totalKept = max(0, totalKept - 1)
-        }
-        if prevStatus != .unreviewed {
-            totalReviewed = max(0, totalReviewed - 1)
-        }
-        currentIndex = prevIndex
+    /// 返回上一张（内部使用）
+    private func goBack() {
+        guard currentIndex > 0 else { return }
+        currentIndex -= 1
+    }
+
+    func markAsKept() {
+        markAsKeptAndAdvance()
+    }
+
+    func markForDeletion() {
+        markForDeletionAndGoBack()
+    }
+
+    func undoLastSwipe() {
+        goToPrevious()
     }
 
     // MARK: - 回收站操作
