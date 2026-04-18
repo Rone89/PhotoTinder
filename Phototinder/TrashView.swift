@@ -195,6 +195,67 @@ struct TrashView: View {
     }
 }
 
+// MARK: - ZoomableImageView（支持双指缩放的图片查看器）
+
+struct ZoomableImageView: View {
+    let image: UIImage
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { geo in
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .offset(offset)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            let newScale = lastScale * value
+                            scale = min(max(newScale, 1.0), 5.0)
+                        }
+                        .onEnded { value in
+                            if scale < 1.05 {
+                                withAnimation { resetZoom() }
+                            } else {
+                                lastScale = scale
+                            }
+                        }
+                )
+                .simultaneousGesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if scale > 1.0 {
+                                offset = CGSize(
+                                    width: lastOffset.width + value.translation.width,
+                                    height: lastOffset.height + value.translation.height
+                                )
+                            }
+                        }
+                        .onEnded { _ in
+                            if scale > 1.0 {
+                                lastOffset = offset
+                            }
+                        }
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation { resetZoom() }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+    }
+
+    private func resetZoom() {
+        scale = 1.0
+        lastScale = 1.0
+        offset = .zero
+        lastOffset = .zero
+    }
+}
+
 // MARK: - TrashDetailView（NavigationLink 目标页面，自动带返回按钮）
 
 struct TrashDetailView: View {
@@ -216,10 +277,7 @@ struct TrashDetailView: View {
             Color.black.ignoresSafeArea()
 
             if let ui = image {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFit()
-                    .padding()
+                ZoomableImageView(image: ui)
             } else if loadFailed {
                 VStack(spacing: 12) {
                     Image(systemName: "photo.badge.exclamationmark")
