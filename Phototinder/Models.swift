@@ -5,13 +5,17 @@ enum ReviewStatus {
     case unreviewed, keep, delete
 }
 
-struct PhotoItem: Identifiable, Equatable {
+struct PhotoItem: Identifiable, Equatable, Hashable {
     let id: String
     let asset: PHAsset
     var status: ReviewStatus = .unreviewed
     
     static func == (lhs: PhotoItem, rhs: PhotoItem) -> Bool {
         lhs.id == rhs.id && lhs.status == rhs.status
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 
