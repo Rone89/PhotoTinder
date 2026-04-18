@@ -11,8 +11,8 @@ struct TrashView: View {
     @State private var isEditMode = false
     @State private var selectedIds: Set<String> = []
 
-    /// 固定 3 列网格
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 3)
+    /// 固定 3 列网格，间距 2pt
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
     private var trashItems: [PhotoItem] { viewModel.allDeletedPhotos }
 
@@ -118,10 +118,11 @@ struct TrashView: View {
 
     private var trashGrid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 3) {
+            LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(trashItems) { item in
                     MiniThumbnail(asset: item.asset)
-                        .aspectRatio(1, contentMode: .fit)
+                        .aspectRatio(1, contentMode: .fill)
+                        .clipped()
                         .overlay(alignment: .topLeading) {
                             if isEditMode { checkBadge(item) }
                         }
@@ -140,7 +141,7 @@ struct TrashView: View {
                         .overlay {
                             if isEditMode && selectedIds.contains(item.id) {
                                 Color.blue.opacity(0.3)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .clipShape(RoundedRectangle(cornerRadius: 2))
                             }
                         }
                         .onTapGesture {
@@ -370,8 +371,6 @@ struct TrashDetailView: View {
                 .padding(12)
             }
         }
-        // 关键：只设 aspectRatio，不设 frame(maxWidth/Height: .infinity)
-        // 照片区域大小完全匹配照片比例，无白边
         .aspectRatio(photoAspectRatio, contentMode: .fit)
         // 长按播放 Live Photo
         .onLongPressGesture(minimumDuration: 0.1) {

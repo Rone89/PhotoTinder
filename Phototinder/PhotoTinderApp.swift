@@ -15,125 +15,63 @@ struct PhotoTinderApp: App {
     }
 }
 
-// MARK: - 主界面（底部 Dock 栏）
+// MARK: - 主界面（系统 TabView，自动获得 iOS 26 Liquid Glass 样式）
 
 struct MainTabView: View {
     @Environment(PhotoViewModel.self) var viewModel
-    @State private var selectedTab: Tab = .home
-
-    enum Tab: String, CaseIterable {
-        case home = "主页"
-        case trash = "回收站"
-    }
-
-    private let slideOffset: CGFloat = 1000
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // 内容切换（滑动 + 淡入淡出）
-            ZStack {
-                homeContent
-                    .offset(x: selectedTab == .home ? 0 : -slideOffset)
-                    .opacity(selectedTab == .home ? 1 : 0)
-                    .allowsHitTesting(selectedTab == .home)
+        ZStack {
+            TabView {
+                Tab("主页", systemImage: "house.fill") {
+                    NavigationStack {
+                        homeContent
+                    }
+                }
 
-                trashContent
-                    .offset(x: selectedTab == .trash ? 0 : slideOffset)
-                    .opacity(selectedTab == .trash ? 1 : 0)
-                    .allowsHitTesting(selectedTab == .trash)
+                Tab("回收站", systemImage: "archivebox.fill") {
+                    NavigationStack {
+                        TrashView()
+                    }
+                }
             }
-            .animation(.easeInOut(duration: 0.25), value: selectedTab)
 
-            // 底部 Dock 栏
-            dockBar
-                .padding(.bottom, safeBottom + 8)
-
-            // 审查界面全屏覆盖
+            // 审查界面全屏覆盖（在 TabView 之上，自动遮盖 tab bar）
             if viewModel.isReviewing {
                 ReviewView()
+                    .ignoresSafeArea()
                     .transition(.move(edge: .trailing))
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: viewModel.isReviewing)
     }
 
-    private var safeBottom: CGFloat {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else { return 34 }
-        return window.safeAreaInsets.bottom
-    }
-
-    // MARK: - Dock 栏
-
-    private var dockBar: some View {
-        HStack(spacing: 60) {
-            ForEach(Tab.allCases, id: \.rawValue) { tab in
-                Button {
-                    if tab == .home && viewModel.isReviewing {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            viewModel.isReviewing = false
-                        }
-                    } else {
-                        withAnimation(.easeInOut(duration: 0.25)) { selectedTab = tab }
-                    }
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: tab == .home ? "house.fill" : "archivebox.fill")
-                            .font(.title2)
-                            .foregroundStyle(selectedTab == tab ? Color.accentColor : .secondary)
-                        Text(tab.rawValue)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(selectedTab == tab ? Color.accentColor : .secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 40)
-        .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.08), radius: 12, y: -2)
-        )
-    }
-
     // MARK: - 主页内容
 
     private var homeContent: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Spacer()
+        VStack(spacing: 0) {
+            Spacer()
 
-                heroSection
+            heroSection
 
-                Spacer()
+            Spacer()
 
-                if viewModel.totalReviewed > 0 {
-                    statsSection
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 20)
-                }
-
-                Spacer()
-
-                startButton
-                    .padding(.horizontal, 40)
-                    .padding(.bottom, 16)
-
-                Spacer()
+            if viewModel.totalReviewed > 0 {
+                statsSection
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
             }
-            .navigationTitle("照片清理")
-            .navigationBarTitleDisplayMode(.large)
+
+            Spacer()
+
+            startButton
+                .padding(.horizontal, 40)
+                .padding(.bottom, 16)
+
+            Spacer()
         }
-    }
-
-    // MARK: - 回收站内容
-
-    private var trashContent: some View {
-        NavigationStack { TrashView() }
+        .navigationTitle("照片清理")
+        .navigationBarTitleDisplayMode(.large)
     }
 
     // MARK: - Hero

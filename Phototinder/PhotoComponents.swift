@@ -46,6 +46,7 @@ enum PhotoLoader {
 }
 
 // MARK: - MiniThumbnail（用于回收站网格、删除托盘）
+// 注意：不设 aspectRatio，由父级控制尺寸（网格 .aspectRatio(1, ...) 保证 1:1）
 
 struct MiniThumbnail: View {
     let asset: PHAsset
@@ -59,10 +60,12 @@ struct MiniThumbnail: View {
     var body: some View {
         Rectangle()
             .fill(Color(.systemGray5))
-            .aspectRatio(1, contentMode: .fit)
             .overlay {
                 if let ui = image {
-                    Image(uiImage: ui).resizable().scaledToFill().clipped()
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .clipped()
                 } else {
                     ProgressView().scaleEffect(0.8).tint(.gray)
                 }
