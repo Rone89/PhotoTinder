@@ -14,26 +14,9 @@ struct DeleteTrayView: View {
         NavigationStack {
             Group {
                 if deletedItems.isEmpty {
-                    ContentUnavailableView("暂无待删除照片", systemImage: "trash")
+                    emptyView
                 } else {
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 2) {
-                            ForEach(deletedItems) { item in
-                                ThumbnailView(asset: item.asset)
-                                    .overlay(alignment: .topTrailing) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.title3)
-                                            .foregroundColor(.red)
-                                            .background(Circle().fill(.white).padding(1))
-                                            .padding(4)
-                                    }
-                                    .onTapGesture {
-                                        viewModel.cancelDelete(for: item.id)
-                                    }
-                            }
-                        }
-                        .padding()
-                    }
+                    thumbnailGrid
                 }
             }
             .navigationTitle("待删除 (\(deletedItems.count))")
@@ -44,5 +27,34 @@ struct DeleteTrayView: View {
                 }
             }
         }
+    }
+
+    private var emptyView: some View {
+        ContentUnavailableView("暂无待删除照片", systemImage: "trash")
+    }
+
+    private var thumbnailGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(deletedItems) { item in
+                    gridCell(item)
+                }
+            }
+            .padding()
+        }
+    }
+
+    private func gridCell(_ item: PhotoItem) -> some View {
+        ThumbnailView(asset: item.asset)
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.red)
+                    .background(Circle().fill(.white).padding(1))
+                    .padding(4)
+            }
+            .onTapGesture {
+                viewModel.cancelDelete(for: item.id)
+            }
     }
 }
