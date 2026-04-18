@@ -4,137 +4,219 @@ import Photos
 @MainActor
 @Observable
 class PhotoViewModel {
-    var isAuthorized = false
-    var isLoading = false
-    var monthGroups: [MonthGroup] = []
-    var currentGroupIndex: Int? = nil
-    var currentCardIndex: Int = 0
-    
-    // 回收站相关状态
-    var showConfirmDeleteAlert = false
-    var showDeleteSuccessAlert = false
-    var deletedCount = 0
-    
-    var currentGroup: MonthGroup? {
-        guard let index = currentGroupIndex, monthGroups.indices.contains(index) else { return nil }
-        return monthGroups[index]
+    // MARK: - 当前批次
+    var currentPhotos: [PhotoItem] = []
+    var currentIndex: Int = 0
+    var batchNumber: Int = 0
+
+    // MARK: - 跨批次追踪
+    var seenAssetIds: Set<String> = []
+    var totalReviewed: Int = 0
+    var totalKept: Int = 0
+
+    // MARK: - 跨批次回收站（持久保存）
+    var allDeletedPhotos: [PhotoItem] = []
+
+    // MARK: - 状态
+    var isLoading: Bool = false
+    var hasMorePhotos: Bool = true
+    var isReviewing: Bool = false
+
+    // MARK: - 计算属性
+    var currentPhoto: PhotoItem? {
+        guard currentIndex >= 0, currentIndex < currentPhotos.count else { return nil }
+        return currentPhotos[currentIndex]
     }
-    
-    /// 回收站：收集所有分组中标记为删除的照片（按月分组）
-    var trashGroups: [MonthGroup] {
-        monthGroups.compactMap { group in
-            let deleteItems = group.items.filter { $0.status == .delete }
-            if deleteItems.isEmpty { return nil }
-            return MonthGroup(title: group.title, date: group.date, items: deleteItems)
-        }
+
+    var currentBatchDeletedCount: Int {
+        currentPhotos.filter { $0.status == .delete }.count
     }
-    
-    /// 回收站总数
-    var totalTrashCount: Int {
-        monthGroups.reduce(0) { $0 + $1.items.filter { $0.status == .delete }.count }
+
+    var currentBatchKeptCount: Int {
+        currentPhotos.filter { $0.status == .keep }.count
     }
-    
+
+    var currentBatchReviewedCount: Int {
+        currentPhotos.filter { $0.status != .unreviewed }.count
+    }
+
+    var isBatchComplete: Bool {
+        currentBatchReviewedCount >= currentPhotos.count && !currentPhotos.isEmpty
+    }
+
+    // MARK: - 加载照片
     func checkPermissionAndFetch() async {
         isLoading = true
-        isAuthorized = await PhotoLibraryService.shared.requestAuthorization()
-        if isAuthorized {
-            monthGroups = await PhotoLibraryService.shared.fetchAndGroupPhotos()
+        let authorized = await PhotoLibraryService.shared.requestAuthorization()
+        if authorized {
+            await loadRandomPhotos()
         }
         isLoading = false
     }
-    
-    func startReviewing(index: Int) {
-        currentGroupIndex = index
-        currentCardIndex = monthGroups[index].items.firstIndex(where: { $0.status == .unreviewed }) ?? 0
-    }
-    
-    func handleSwipe(direction: SwipeDirection) {
-        guard let gIdx = currentGroupIndex else { return }
-        switch direction {
-        case .left: monthGroups[gIdx].items[currentCardIndex].status = .keep
-        case .up: monthGroups[gIdx].items[currentCardIndex].status = .delete
-        case .right:
-            if currentCardIndex > 0 {
-                currentCardIndex -= 1
-                monthGroups[gIdx].items[currentCardIndex].status = .unreviewed
-                return
+
+    func loadRandomPhotos(count: Int = 100) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let allPhotos = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+
+        var available: [PHAsset] = []
+        allPhotos.enumerateObjects { asset, _, _ in
+            if !seenAssetIds.contains(asset.localIdentifier) {
+                available.append(asset)
             }
-        case .down: break
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.currentCardIndex += 1
+
+        if available.isEmpty {
+            hasMorePhotos = false
+            return
+        }
+
+        available.shuffle()
+        let selected = Array(available.prefix(count))
+
+        for asset in selected {
+            seenAssetIds.insert(asset.localIdentifier)
+        }
+
+        currentPhotos = selected.map { PhotoItem(asset: $0) }
+        currentIndex = 0
+        batchNumber += 1
+        isReviewing = true
+    }
+
+    func loadNextBatch() async {
+        await loadRandomPhotos()
+    }
+
+    // MARK: - 滑动操作
+
+    func markAsKept() {
+        guard let photo = currentPhoto else { return }
+        if let idx = currentPhotos.firstIndex(where: { $0.id == photo.id }) {
+            currentPhotos[idx].status = .keep
+        }
+        totalKept += 1
+        totalReviewed += 1
+        advanceCard()
+    }
+
+    func markForDeletion() {
+        guard let photo = currentPhoto else { return }
+        if let idx = currentPhotos.firstIndex(where: { $0.id == photo.id }) {
+            currentPhotos[idx].status = .delete
+        }
+        if !allDeletedPhotos.contains(where: { $0.id == photo.id }) {
+            allDeletedPhotos.append(photo)
+        }
+        totalReviewed += 1
+        advanceCard()
+    }
+
+    private func advanceCard() {
+        currentIndex += 1
+        if isBatchComplete {
+            Task { await loadNextBatch() }
         }
     }
-    
+
+    func undoLastSwipe() {
+        guard currentIndex > 0 else { return }
+        let prevIndex = currentIndex - 1
+        let prevStatus = currentPhotos[prevIndex].status
+        currentPhotos[prevIndex].status = .unreviewed
+
+        if prevStatus == .delete {
+            allDeletedPhotos.removeAll { $0.id == currentPhotos[prevIndex].id }
+        }
+        if prevStatus == .keep {
+            totalKept = max(0, totalKept - 1)
+        }
+        if prevStatus != .unreviewed {
+            totalReviewed = max(0, totalReviewed - 1)
+        }
+        currentIndex = prevIndex
+    }
+
     // MARK: - 回收站操作
-    
-    /// 从回收站恢复（取消删除标记）
+
     func restoreFromTrash(_ item: PhotoItem) {
-        for groupIndex in monthGroups.indices {
-            if let itemIndex = monthGroups[groupIndex].items.firstIndex(where: { $0.id == item.id }) {
-                monthGroups[groupIndex].items[itemIndex].status = .keep
-                return
+        allDeletedPhotos.removeAll { $0.id == item.id }
+        if let idx = currentPhotos.firstIndex(where: { $0.id == item.id }) {
+            currentPhotos[idx].status = .unreviewed
+        }
+    }
+
+    func restoreSelectedFromTrash(_ ids: Set<String>) {
+        for id in ids {
+            allDeletedPhotos.removeAll { $0.id == id }
+            if let idx = currentPhotos.firstIndex(where: { $0.id == id }) {
+                currentPhotos[idx].status = .unreviewed
             }
         }
     }
-    
-    /// 从回收站恢复全部
+
     func restoreAllFromTrash() {
-        for groupIndex in monthGroups.indices {
-            for itemIndex in monthGroups[groupIndex].items.indices {
-                if monthGroups[groupIndex].items[itemIndex].status == .delete {
-                    monthGroups[groupIndex].items[itemIndex].status = .keep
-                }
+        let ids = Set(allDeletedPhotos.map { $0.id })
+        allDeletedPhotos.removeAll()
+        for idx in currentPhotos.indices {
+            if ids.contains(currentPhotos[idx].id) {
+                currentPhotos[idx].status = .unreviewed
             }
         }
     }
-    
-    /// 确认删除回收站中所有照片（真正从相册删除）
-    func confirmDeleteAllTrash() async {
-        let allDeleteAssets = monthGroups.flatMap { group in
-            group.items.filter { $0.status == .delete }.map { $0.asset }
-        }
-        guard !allDeleteAssets.isEmpty else { return }
-        
-        try? await PhotoLibraryService.shared.deleteAssets(allDeleteAssets)
-        
-        // 从分组中移除已删除的照片
-        for groupIndex in monthGroups.indices {
-            monthGroups[groupIndex].items.removeAll { $0.status == .delete }
-        }
-        
-        deletedCount = allDeleteAssets.count
-        showDeleteSuccessAlert = true
-    }
-    
-    /// 确认删除回收站中指定照片
-    func confirmDeleteItems(_ items: [PhotoItem]) async {
+
+    func deleteItemsFromTrash(_ items: [PhotoItem]) async {
         let assets = items.map { $0.asset }
+        let ids = Set(items.map { $0.id })
         try? await PhotoLibraryService.shared.deleteAssets(assets)
-        
-        let deleteIds = Set(items.map { $0.id })
-        for groupIndex in monthGroups.indices {
-            monthGroups[groupIndex].items.removeAll { deleteIds.contains($0.id) }
+        allDeletedPhotos.removeAll { ids.contains($0.id) }
+        let before = currentPhotos.count
+        currentPhotos.removeAll { ids.contains($0.id) }
+        let removed = before - currentPhotos.count
+        totalReviewed = max(0, totalReviewed - removed)
+        if currentIndex >= currentPhotos.count {
+            currentIndex = max(0, currentPhotos.count - 1)
         }
-        
-        deletedCount = items.count
-        showDeleteSuccessAlert = true
     }
-    
-    /// 删除当前组中标记的照片（ReviewView 中的提交删除按钮）
-    func commitDeletion() async {
-        guard let gIdx = currentGroupIndex else { return }
-        let assets = monthGroups[gIdx].items.filter { $0.status == .delete }.map { $0.asset }
+
+    func deleteAllFromTrash() async {
+        let assets = allDeletedPhotos.map { $0.asset }
+        let ids = Set(allDeletedPhotos.map { $0.id })
+        guard !assets.isEmpty else { return }
         try? await PhotoLibraryService.shared.deleteAssets(assets)
-        monthGroups[gIdx].items.removeAll { $0.status == .delete }
+        allDeletedPhotos.removeAll()
+        let before = currentPhotos.count
+        currentPhotos.removeAll { ids.contains($0.id) }
+        let removed = before - currentPhotos.count
+        totalReviewed = max(0, totalReviewed - removed)
+        if currentIndex >= currentPhotos.count {
+            currentIndex = max(0, currentPhotos.count - 1)
+        }
     }
-    
+
+    // MARK: - 删除托盘（当前批次）
+
     func cancelDelete(for id: String) {
-        guard let gIdx = currentGroupIndex else { return }
-        if let iIdx = monthGroups[gIdx].items.firstIndex(where: { $0.id == id }) {
-            monthGroups[gIdx].items[iIdx].status = .keep
+        if let idx = currentPhotos.firstIndex(where: { $0.id == id }) {
+            currentPhotos[idx].status = .unreviewed
         }
+        allDeletedPhotos.removeAll { $0.id == id }
+    }
+
+    // MARK: - 重置
+
+    func reset() {
+        currentPhotos = []
+        currentIndex = 0
+        seenAssetIds = []
+        totalReviewed = 0
+        totalKept = 0
+        batchNumber = 0
+        allDeletedPhotos = []
+        hasMorePhotos = true
+        isReviewing = false
     }
 }
-
-enum SwipeDirection { case left, right, up, down }
