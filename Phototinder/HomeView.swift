@@ -15,7 +15,13 @@ struct HomeView: View {
                     }
                     Spacer()
                     if group.deleteCount > 0 {
-                        Text("\(group.deleteCount)").foregroundColor(.red).bold()
+                        Text("\(group.deleteCount)")
+                            .foregroundColor(.white)
+                            .fontWeight(.bold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Circle().fill(.red))
+                            .font(.caption)
                     }
                 }
                 .contentShape(Rectangle())
@@ -26,7 +32,18 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showTrash = true } label: {
-                        Image(systemName: "trash.circle")
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "trash")
+                            if viewModel.totalTrashCount > 0 {
+                                Text("\(viewModel.totalTrashCount)")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(4)
+                                    .background(Circle().fill(.red))
+                                    .offset(x: 8, y: -8)
+                            }
+                        }
                     }
                 }
             }
