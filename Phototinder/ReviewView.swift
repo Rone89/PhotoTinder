@@ -256,6 +256,42 @@ struct ReviewView: View {
     }
 }
 
+// MARK: - 图片加载工具函数（避免死锁：后台线程同步请求 + continuation 回到 async）
+
+enum PhotoLoader {
+    static func loadImage(for asset: PHAsset, size: CGSize, contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
+                options.deliveryMode = .highQualityFormat
+                options.resizeMode = .exact
+                options.isSynchronous = true
+
+                var result: UIImage?
+                PHImageManager.default().requestImage(
+                    for: asset,
+                    targetSize: size,
+                    contentMode: contentMode,
+                    options: options
+                ) { img, _ in
+                    result = img
+                }
+                continuation.resume(returning: result)
+            }
+        }
+    }
+
+    static func loadWithFallback(for asset: PHAsset, sizes: [CGSize], contentMode: PHImageContentMode = .aspectFit) async -> UIImage? {
+        for size in sizes {
+            if let img = await loadImage(for: asset, size: size, contentMode: contentMode) {
+                return img
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - PhotoCardView（纯展示）
 
 struct PhotoCardView: View {
@@ -290,53 +326,20 @@ struct PhotoCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
             .task(id: item.id) {
-                await loadPhoto()
+                image = nil
+                loadFailed = false
+                let sizes: [CGSize] = [
+                    CGSize(width: 1200, height: 1800),
+                    PHImageManagerMaximumSize,
+                    CGSize(width: 400, height: 600)
+                ]
+                let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
+                if let result = result {
+                    image = result
+                } else {
+                    loadFailed = true
+                }
             }
-    }
-
-    private func loadPhoto() async {
-        image = nil
-        loadFailed = false
-
-        // 尝试加载，如果失败则用较小尺寸重试
-        var loaded = await requestImage(for: item.asset, size: CGSize(width: 1200, height: 1800))
-
-        if loaded == nil {
-            // 重试1：使用原始尺寸
-            loaded = await requestImage(for: item.asset, size: PHImageManagerMaximumSize)
-        }
-
-        if loaded == nil {
-            // 重试2：使用小尺寸
-            loaded = await requestImage(for: item.asset, size: CGSize(width: 400, height: 600))
-        }
-
-        if let loaded = loaded {
-            image = loaded
-        } else {
-            loadFailed = true
-        }
-    }
-
-    private func requestImage(for asset: PHAsset, size: CGSize) async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
-            options.isSynchronous = true
-
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: size,
-                contentMode: .aspectFit,
-                options: options
-            ) { img, info in
-                result = img
-            }
-            continuation.resume(returning: result)
-        }
     }
 }
 
@@ -363,40 +366,12 @@ struct ThumbnailView: View {
                 }
             }
             .task(id: asset.localIdentifier) {
-                await loadThumbnail()
+                image = nil
+                let sizes: [CGSize] = [
+                    CGSize(width: 200, height: 200),
+                    CGSize(width: 100, height: 100)
+                ]
+                image = await PhotoLoader.loadWithFallback(for: asset, sizes: sizes, contentMode: .aspectFill)
             }
-    }
-
-    private func loadThumbnail() async {
-        image = nil
-
-        var loaded = await requestThumb(size: CGSize(width: 200, height: 200))
-
-        if loaded == nil {
-            loaded = await requestThumb(size: CGSize(width: 100, height: 100))
-        }
-
-        image = loaded
-    }
-
-    private func requestThumb(size: CGSize) async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.resizeMode = .exact
-            options.isSynchronous = true
-            options.deliveryMode = .highQualityFormat
-
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: size,
-                contentMode: .aspectFill,
-                options: options
-            ) { img, _ in
-                result = img
-            }
-            continuation.resume(returning: result)
-        }
     }
 }
