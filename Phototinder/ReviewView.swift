@@ -5,7 +5,7 @@ struct ReviewView: View {
     @Environment(PhotoViewModel.self) var viewModel
     @Environment(\.dismiss) var dismiss
     @State private var showingTray = false
-    
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -13,7 +13,7 @@ struct ReviewView: View {
                     if !group.items.isEmpty {
                         progressSection(group: group)
                     }
-                    
+
                     if viewModel.currentCardIndex < group.items.count {
                         cardStackSection(group: group)
                         buttonSection
@@ -38,7 +38,7 @@ struct ReviewView: View {
             }
         }
     }
-    
+
     private func progressSection(group: MonthGroup) -> some View {
         VStack(spacing: 4) {
             Text("\(viewModel.currentCardIndex + 1) / \(group.items.count)")
@@ -50,22 +50,20 @@ struct ReviewView: View {
         .padding(.horizontal)
         .padding(.top, 8)
     }
-    
+
     private func cardStackSection(group: MonthGroup) -> some View {
         ZStack {
             if viewModel.currentCardIndex + 1 < group.items.count {
                 PhotoCardView(item: group.items[viewModel.currentCardIndex + 1], onSwipe: { _ in })
-                    .id(group.items[viewModel.currentCardIndex + 1].id)
                     .scaleEffect(0.95)
                     .offset(y: 10)
                     .opacity(0.7)
             }
             PhotoCardView(item: group.items[viewModel.currentCardIndex], onSwipe: { viewModel.handleSwipe(direction: $0) })
-                .id("\(group.items[viewModel.currentCardIndex].id)-\(viewModel.currentCardIndex)")
         }
         .padding()
     }
-    
+
     private var buttonSection: some View {
         HStack(spacing: 50) {
             actionButton(icon: "arrow.left", color: .green, label: "保留")
@@ -75,7 +73,7 @@ struct ReviewView: View {
         .font(.caption)
         .padding(.bottom)
     }
-    
+
     private func actionButton(icon: String, color: Color, label: String) -> some View {
         VStack {
             Image(systemName: icon).foregroundColor(color)
@@ -89,35 +87,37 @@ struct PhotoCardView: View {
     let onSwipe: (SwipeDirection) -> Void
     @State private var offset: CGSize = .zero
     @State private var image: UIImage?
-    @State private var isLoading = false
-    
+    @State private var didLoad = false
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 RoundedRectangle(cornerRadius: 20).fill(Color(.secondarySystemBackground))
-                
+
                 if let image = image {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
-                } else if isLoading {
+                } else {
                     ProgressView()
                         .scaleEffect(1.5)
                 }
-                
+
                 overlayLabel
             }
             .offset(offset)
             .rotationEffect(.degrees(Double(offset.width / 20)))
             .gesture(swipeGesture)
             .onAppear {
-                loadImage()
+                guard !didLoad else { return }
+                didLoad = true
+                loadFileSync()
             }
         }
     }
-    
+
     private var swipeGesture: some Gesture {
         DragGesture()
             .onChanged { offset = $0.translation }
@@ -136,7 +136,7 @@ struct PhotoCardView: View {
                 }
             }
     }
-    
+
     @ViewBuilder var overlayLabel: some View {
         if offset.width < -50 {
             Text("KEEP")
@@ -152,24 +152,29 @@ struct PhotoCardView: View {
                 .opacity(0.5)
         }
     }
-    
-    private func loadImage() {
-        guard image == nil, !isLoading else { return }
-        isLoading = true
-        
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = true
-        options.deliveryMode = .highQualityFormat
-        options.resizeMode = .exact
-        
-        PHImageManager.default().requestImage(
-            for: item.asset,
-            targetSize: CGSize(width: 800, height: 1200),
-            contentMode: .aspectFill,
-            options: options
-        ) { image, _ in
-            self.image = image
-            self.isLoading = false
+
+    /// 同步加载图片，彻底避免白屏问题
+    private func loadFileSync() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
+            options.isSynchronous = true
+
+            var result: UIImage?
+            PHImageManager.default().requestImage(
+                for: item.asset,
+                targetSize: CGSize(width: 800, height: 1200),
+                contentMode: .aspectFill,
+                options: options
+            ) { img, _ in
+                result = img
+            }
+
+            DispatchQueue.main.async {
+                self.image = result
+            }
         }
     }
 }
