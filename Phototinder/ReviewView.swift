@@ -294,3 +294,54 @@ struct PhotoCardView: View {
         }
     }
 }
+
+// MARK: - ThumbnailView（网格缩略图）
+
+struct ThumbnailView: View {
+    let asset: PHAsset
+    @State private var image: UIImage?
+    @State private var didLoad = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(.systemGray5))
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let uiImage = image {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .clipped()
+                }
+            }
+            .onAppear { loadImage() }
+    }
+
+    private func loadImage() {
+        guard !didLoad else { return }
+        didLoad = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.resizeMode = .exact
+            options.isSynchronous = true
+            options.deliveryMode = .highQualityFormat
+
+            let targetSize = CGSize(width: 200, height: 200)
+            var result: UIImage?
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: targetSize,
+                contentMode: .aspectFill,
+                options: options
+            ) { img, _ in
+                result = img
+            }
+
+            DispatchQueue.main.async {
+                self.image = result
+            }
+        }
+    }
+}
