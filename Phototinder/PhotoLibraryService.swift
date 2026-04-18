@@ -44,4 +44,27 @@ actor PhotoLibraryService {
             PHAssetChangeRequest.deleteAssets(assets as NSFastEnumeration)
         }
     }
+    
+    func fetchDeletedPhotos() async -> [PhotoItem] {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        fetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeCloudShared, .typeiTunesSynced]
+        let smartAlbums = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .smartAlbumRecentlyDeleted, options: nil)
+        var items: [PhotoItem] = []
+        smartAlbums.enumerateObjects { collection, _, _ in
+            let fetchResult = PHAsset.fetchAssets(in: collection, options: fetchOptions)
+            for i in 0..<fetchResult.count {
+                let asset = fetchResult.object(at: i)
+                items.append(PhotoItem(id: asset.localIdentifier, asset: asset))
+            }
+        }
+        return items
+    }
+    
+    func permanentDeleteAssets(_ assets: [PHAsset]) async throws {
+        // PHAssetChangeRequest.deleteAssets on already-deleted assets will trigger immediate permanent deletion
+        try await PHPhotoLibrary.shared().performChanges {
+            PHAssetChangeRequest.deleteAssets(assets as NSFastEnumeration)
+        }
+    }
 }
