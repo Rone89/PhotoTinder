@@ -97,7 +97,8 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .foregroundStyle(.white)
-                .background(Capsule().fill(Color.blue.gradient.shadow(color: .blue.opacity(0.25), radius: 4)))
+                .background(Capsule().fill(Color.blue))
+                .shadow(color: .blue.opacity(0.25), radius: 4)
         }
         .buttonStyle(.plain)
         .disabled(viewModel.isLoading)

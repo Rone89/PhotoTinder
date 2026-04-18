@@ -119,7 +119,7 @@ struct TrashView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(trashItems) { item in
-                    ThumbnailView(asset: item.asset)
+                    MiniThumbnail(asset: item.asset)
                         .overlay(alignment: .topLeading) {
                             if isEditMode { checkBadge(item) }
                         }
