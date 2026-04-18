@@ -104,8 +104,8 @@ class PhotoViewModel {
         advanceCard()
     }
 
-    /// 上滑 = 删除，返回上一张
-    func markForDeletionAndGoBack() {
+    /// 上滑 = 删除，前进到下一张
+    func markForDeletionAndAdvance() {
         guard let photo = currentPhoto else { return }
         if let idx = currentPhotos.firstIndex(where: { $0.id == photo.id }) {
             currentPhotos[idx].status = .delete
@@ -114,7 +114,7 @@ class PhotoViewModel {
             allDeletedPhotos.append(photo)
         }
         totalReviewed += 1
-        goBack()
+        advanceCard()
     }
 
     private func advanceCard() {
@@ -141,7 +141,7 @@ class PhotoViewModel {
     }
 
     func markForDeletion() {
-        markForDeletionAndGoBack()
+        markForDeletionAndAdvance()
     }
 
     func undoLastSwipe() {
