@@ -63,17 +63,17 @@ struct PhotoInfoPanel: View {
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
                 
-                Text("·")
-                    .foregroundColor(.tertiary)
+                Text("\u{00B7}")
+                    .foregroundColor(Color(.tertiaryLabel))
             }
             
-            Text("\(asset.pixelWidth) × \(asset.pixelHeight)")
+            Text("\(asset.pixelWidth) \u00D7 \(asset.pixelHeight)")
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
             
             if asset.location != nil {
-                Text("·")
-                    .foregroundColor(.tertiary)
+                Text("\u{00B7}")
+                    .foregroundColor(Color(.tertiaryLabel))
                 Image(systemName: "location.fill")
                     .font(.system(size: 9))
                     .foregroundColor(.blue)
@@ -120,7 +120,7 @@ struct PhotoInfoPanel: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.caption2)
-                    .foregroundColor(.tertiary)
+                    .foregroundColor(Color(.tertiaryLabel))
                 Text(value)
                     .font(.caption.weight(.medium))
                     .lineLimit(2)

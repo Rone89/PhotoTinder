@@ -79,7 +79,7 @@ struct ReviewView: View {
                 .foregroundColor(.secondary)
             Text("所有照片已审查完毕")
                 .font(.subheadline)
-                .foregroundColor(.tertiary)
+                .foregroundColor(Color(.tertiaryLabel))
             Button("返回主页") {
                 viewModel.isReviewing = false
             }
@@ -117,7 +117,7 @@ struct ReviewView: View {
             
             Text("共审查 \(viewModel.currentPhotos.count) 张")
                 .font(.subheadline)
-                .foregroundColor(.tertiary)
+                .foregroundColor(Color(.tertiaryLabel))
 
             Spacer()
 
@@ -157,7 +157,7 @@ struct ReviewView: View {
             } else {
                 Text("所有照片已审查完毕")
                     .font(.caption)
-                    .foregroundColor(.tertiary)
+                    .foregroundColor(Color(.tertiaryLabel))
                     .padding(.bottom, 40)
             }
         }
@@ -227,7 +227,7 @@ struct ReviewView: View {
         VStack(spacing: 3) {
             Text("\(min(viewModel.currentIndex + 1, viewModel.currentPhotos.count)) / \(viewModel.currentPhotos.count)")
                 .font(.caption2.monospacedDigit())
-                .foregroundColor(.tertiary)
+                .foregroundColor(Color(.tertiaryLabel))
             
             ProgressView(value: Double(min(viewModel.currentIndex, viewModel.currentPhotos.count)), total: Double(currentNonZeroCount))
                 .tint(.blue)
