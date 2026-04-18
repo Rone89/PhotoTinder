@@ -42,15 +42,15 @@ struct TrashView: View {
         }
         .fullScreenCover(isPresented: $showDetail) {
             if let item = selectedItem {
-                NavigationStack {
-                    TrashDetailView(item: item, onRestore: {
-                        viewModel.restoreFromTrash(item)
-                        showDetail = false
-                    }, onDelete: {
-                        deleteSingle(item)
-                        showDetail = false
-                    })
-                }
+                TrashDetailView(item: item, onRestore: {
+                    viewModel.restoreFromTrash(item)
+                    showDetail = false
+                }, onDelete: {
+                    deleteSingle(item)
+                    showDetail = false
+                }, onClose: {
+                    showDetail = false
+                })
             }
         }
         .alert("确认删除", isPresented: $showConfirmDeleteAlert) {
@@ -248,51 +248,112 @@ struct TrashView: View {
     }
 }
 
-// MARK: - TrashDetailView
+// MARK: - TrashDetailView（不嵌套 NavigationStack，直接用 ZStack + 浮动按钮）
 
 struct TrashDetailView: View {
     let item: PhotoItem
     let onRestore: () -> Void
     let onDelete: () -> Void
+    let onClose: () -> Void
 
-    @Environment(\.dismiss) var dismiss
     @State private var image: UIImage?
+    @State private var loadFailed = false
+    @State private var showMenu = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+
             if let uiImage = image {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
                     .padding()
+            } else if loadFailed {
+                VStack(spacing: 12) {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .font(.system(size: 50))
+                        .foregroundColor(.white.opacity(0.6))
+                    Text("无法加载此照片")
+                        .foregroundColor(.white.opacity(0.6))
+                }
             } else {
                 ProgressView()
                     .scaleEffect(2)
                     .tint(.white)
             }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("关闭") { dismiss() }
-                    .foregroundColor(.white)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button { onRestore() } label: {
-                        Label("移出回收站", systemImage: "arrow.uturn.left")
+
+            // 顶部按钮
+            VStack {
+                HStack {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .background(Circle().fill(.black.opacity(0.3)).padding(2))
                     }
-                    Button(role: .destructive) { onDelete() } label: {
-                        Label("永久删除", systemImage: "trash.fill")
+                    Spacer()
+                    Button(action: { showMenu.toggle() }) {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .background(Circle().fill(.black.opacity(0.3)).padding(2))
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.white)
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 50)
+                Spacer()
+            }
+
+            // 底部菜单
+            if showMenu {
+                VStack(spacing: 0) {
+                    Button(action: {
+                        showMenu = false
+                        onRestore()
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.uturn.left")
+                            Text("移出回收站")
+                            Spacer()
+                        }
+                        .padding()
+                        .foregroundColor(.blue)
+                    }
+
+                    Divider().background(Color.white.opacity(0.3))
+
+                    Button(role: .destructive, action: {
+                        showMenu = false
+                        onDelete()
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.fill")
+                            Text("永久删除")
+                            Spacer()
+                        }
+                        .padding()
+                        .foregroundColor(.red)
+                    }
+
+                    Divider().background(Color.white.opacity(0.3))
+
+                    Button(action: { showMenu = false }) {
+                        HStack {
+                            Text("取消")
+                            Spacer()
+                        }
+                        .padding()
+                        .foregroundColor(.white)
+                    }
+                }
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 60)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .task(id: item.id) {
             await loadImage()
         }
@@ -300,26 +361,41 @@ struct TrashDetailView: View {
 
     private func loadImage() async {
         image = nil
-        let loaded = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.deliveryMode = .highQualityFormat
-                options.resizeMode = .exact
-                options.isSynchronous = true
+        loadFailed = false
 
-                var result: UIImage?
-                PHImageManager.default().requestImage(
-                    for: item.asset,
-                    targetSize: CGSize(width: 1500, height: 2000),
-                    contentMode: .aspectFit,
-                    options: options
-                ) { img, _ in
-                    result = img
-                }
-                continuation.resume(returning: result)
-            }
+        var loaded = await requestImage(size: CGSize(width: 1500, height: 2000))
+        if loaded == nil {
+            loaded = await requestImage(size: PHImageManagerMaximumSize)
         }
-        image = loaded
+        if loaded == nil {
+            loaded = await requestImage(size: CGSize(width: 600, height: 800))
+        }
+
+        if let loaded = loaded {
+            image = loaded
+        } else {
+            loadFailed = true
+        }
+    }
+
+    private func requestImage(size: CGSize) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
+            options.isSynchronous = true
+
+            var result: UIImage?
+            PHImageManager.default().requestImage(
+                for: item.asset,
+                targetSize: size,
+                contentMode: .aspectFit,
+                options: options
+            ) { img, _ in
+                result = img
+            }
+            continuation.resume(returning: result)
+        }
     }
 }
