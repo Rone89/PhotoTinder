@@ -43,7 +43,7 @@ struct MainTabView: View {
 
             // 底部 Dock 栏
             dockBar
-                .padding(.bottom, 8)
+                .padding(.bottom, safeBottom + 8)
 
             // 审查界面全屏覆盖
             if viewModel.isReviewing {
@@ -54,6 +54,12 @@ struct MainTabView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: viewModel.isReviewing)
     }
 
+    private var safeBottom: CGFloat {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else { return 34 }
+        return window.safeAreaInsets.bottom
+    }
+
     // MARK: - Dock 栏
 
     private var dockBar: some View {
@@ -61,10 +67,11 @@ struct MainTabView: View {
             ForEach(Tab.allCases, id: \.rawValue) { tab in
                 Button {
                     if tab == .home && viewModel.isReviewing {
-                        // 审查中点击主页 → 返回
-                        viewModel.isReviewing = false
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            viewModel.isReviewing = false
+                        }
                     } else {
-                        selectedTab = tab
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab }
                     }
                 } label: {
                     VStack(spacing: 4) {
@@ -84,11 +91,9 @@ struct MainTabView: View {
         }
         .padding(.horizontal, 40)
         .background(
-            GlassEffectContainer(spacing: 0) {
-                Capsule()
-                    .fill(Color.white.opacity(0.7))
-                    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: -2)
-            }
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.08), radius: 12, y: -2)
         )
     }
 
@@ -135,11 +140,7 @@ struct MainTabView: View {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 72))
                 .foregroundStyle(
-                    LinearGradient(
-                        colors: [.blue, .cyan],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                    LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
             Text("照片清理助手")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -154,7 +155,7 @@ struct MainTabView: View {
     // MARK: - Stats
 
     private var statsSection: some View {
-        GlassEffectContainer(spacing: 12) {
+        VStack(spacing: 12) {
             HStack(spacing: 0) {
                 statBox("已审查", "\(viewModel.totalReviewed)", "checkmark.circle", .green)
                 Divider().frame(height: 50).padding(.vertical, 6)
@@ -162,8 +163,8 @@ struct MainTabView: View {
                 Divider().frame(height: 50).padding(.vertical, 6)
                 statBox("已保留", "\(viewModel.totalKept)", "heart", .blue)
             }
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
         }
+        .background(Color(.systemBackground).clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.06), radius: 8))
     }
 
     private func statBox(_ title: String, _ value: String, _ icon: String, _ color: Color) -> some View {
@@ -181,7 +182,7 @@ struct MainTabView: View {
         .padding(.vertical, 14)
     }
 
-    // MARK: - 开始按钮（iOS 26 Liquid Glass 风格）
+    // MARK: - 开始按钮
 
     private var startButton: some View {
         Button {
@@ -196,8 +197,8 @@ struct MainTabView: View {
                 .font(.title3.bold())
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)
-                .glassEffect(.prominent.tint(.blue))
-                .clipShape(Capsule())
+                .foregroundStyle(.white)
+                .background(Capsule().fill(Color.blue.gradient.shadow(color: .blue.opacity(0.25), radius: 4)))
         }
         .buttonStyle(.plain)
         .disabled(viewModel.isLoading)

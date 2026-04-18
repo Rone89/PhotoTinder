@@ -1,11 +1,10 @@
 import SwiftUI
 import Photos
-import MapKit
 
 /// 照片元信息面板 —— 显示在审查界面的照片下方
 struct PhotoInfoPanel: View {
     let asset: PHAsset
-    @State private var metadata: PhotoMetadata?
+    @State private var deviceName: String? = nil
     
     // 展开/收起状态
     @State private var isExpanded = false
@@ -17,8 +16,8 @@ struct PhotoInfoPanel: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     isExpanded.toggle()
                 }
-                if metadata == nil {
-                    Task { metadata = await PhotoMetadata.fullFrom(asset) }
+                if deviceName == nil && isExpanded {
+                    Task { deviceName = await fetchDeviceName(for: asset) }
                 }
             } label: {
                 HStack(spacing: 8) {
@@ -90,21 +89,22 @@ struct PhotoInfoPanel: View {
         ], spacing: 10) {
             infoRow(icon: "calendar", title: "拍摄时间", value: asset.creationDate.map { fullDate($0) } ?? "未知")
             
-            infoRow(icon: "crop", title: "分辨率", value: "\(asset.pixelWidth) × \(asset.pixelHeight)")
+            infoRow(icon: "crop", title: "分辨率", value: "\(asset.pixelWidth) \u{00D7} \(asset.pixelHeight)")
             
             locationRow
             
-            infoRow(icon: "iphone", title: "设备", value: metadata?.deviceName ?? "加载中...")
+            infoRow(icon: "iphone", title: "设备", value: deviceName ?? "加载中...")
             
-            infoRow(icon: "photo", title: "文件大小", value: metadata?.fileSize ?? "计算中...")
+            infoRow(icon: "photo", title: "文件大小", value: formatFileSize(asset))
         }
-        .animation(.easeInOut(duration: 0.2), value: metadata)
+        .animation(.easeInOut(duration: 0.2), value: deviceName)
     }
 
     @ViewBuilder
     private var locationRow: some View {
         if let loc = asset.location {
-            infoRow(icon: "mappin.circle.fill", title: "位置", value: "\(String(format: "%.4f", loc.coordinate.latitude)), \(String(format: "%.4f", loc.coordinate.longitude))")
+            infoRow(icon: "mappin.circle.fill", title: "位置",
+                   value: "\(String(format: "%.4f", loc.coordinate.latitude)), \(String(format: "%.4f", loc.coordinate.longitude))")
         } else {
             infoRow(icon: "location.slash", title: "位置", value: "无位置信息")
         }
@@ -134,7 +134,7 @@ struct PhotoInfoPanel: View {
         .cornerRadius(8)
     }
 
-    // MARK: - 日期格式化
+    // MARK: - 格式化
 
     private func formatDate(_ date: Date) -> String {
         let fmt = DateFormatter()
@@ -147,5 +147,11 @@ struct PhotoInfoPanel: View {
         fmt.dateStyle = .long
         fmt.timeStyle = .short
         return fmt.string(from: date)
+    }
+
+    private func formatFileSize(_ asset: PHAsset) -> String {
+        let pixels = asset.pixelWidth * asset.pixelHeight
+        if pixels < 1_000_000 { return "\(pixels / 1000)K px" }
+        return String(format: "%.1fM px", Double(pixels) / 1_000_000.0)
     }
 }

@@ -44,7 +44,8 @@ struct ReviewView: View {
                         Button { showDeleteTray = true } label: {
                             Label("\(viewModel.currentBatchDeletedCount)", systemImage: "trash")
                                 .font(.subheadline)
-                                .glassEffect(.regular.interactive())
+                                .padding(8)
+                                .background(.ultraThinMaterial, in: Capsule())
                         }
                         .buttonStyle(.plain)
                     }
@@ -269,26 +270,24 @@ struct ReviewView: View {
             .scaleEffect(0.9 + min(abs(dragOffset.width) / 300.0, abs(dragOffset.height) / 300.0, 0.15))
     }
 
-    // MARK: - 按钮行（iOS 26 Liquid Glass）
+    // MARK: - 按钮行（毛玻璃风格）
 
     private var buttonsRow: some View {
-        GlassEffectContainer(spacing: 36) {
-            HStack(spacing: 36) {
-                actionButton(icon: "arrow.left", label: "保留", color: .green) {
-                    performSwipe(action: .keep)
-                }
-                actionButton(icon: "arrow.up", label: "删除", color: .red) {
-                    performSwipe(action: .delete)
-                }
-                actionButton(icon: "arrow.right", label: "返回", color: .orange) {
-                    performSwipe(action: .goBack)
-                }
+        HStack(spacing: 36) {
+            actionButton(icon: "arrow.left", label: "保留", color: .green) {
+                performSwipe(action: .keep)
             }
-            .padding(.vertical, 10)
+            actionButton(icon: "arrow.up", label: "删除", color: .red) {
+                performSwipe(action: .delete)
+            }
+            actionButton(icon: "arrow.right", label: "返回", color: .orange) {
+                performSwipe(action: .goBack)
+            }
         }
-        .glassEffect(.regular.tint().interactive())
-        .clipShape(Capsule())
-        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 28)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
     }
 
     private func actionButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -446,7 +445,7 @@ struct ZoomablePhotoCard: View {
             }
             // 动画过渡
             .animation(.spring(response: 0.2, dampingFraction: 0.85), value: scale)
-            .animation(.smooth(duration: 0.15), value: translation)
+            .animation(.easeInOut(duration: 0.15), value: translation)
             // 手势
             .gesture(magnificationGesture(baseSize: baseSize))
             .simultaneousGesture(dragGesture)

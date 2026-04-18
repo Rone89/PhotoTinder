@@ -1,9 +1,11 @@
 import SwiftUI
 import Photos
 
+// Note: 主界面已迁移到 PhotoTinderApp.swift 的 MainTabView
+// 此文件保留为备用，不再使用 GlassEffect 等 iOS 18+ API
+
 struct HomeView: View {
-    @State private var viewModel = PhotoViewModel()
-    @State private var showTrash = false
+    @Environment(PhotoViewModel.self) var viewModel
 
     var body: some View {
         NavigationStack {
@@ -26,26 +28,9 @@ struct HomeView: View {
                     .padding(.horizontal, 40)
                     .padding(.bottom, 16)
 
-                trashButton
-                    .padding(.bottom, 40)
+                Spacer()
             }
             .navigationTitle("照片清理")
-            .fullScreenCover(isPresented: Binding(
-                get: { viewModel.isReviewing },
-                set: { if !$0 { viewModel.isReviewing = false } }
-            )) {
-                ReviewView()
-                    .environment(viewModel)
-            }
-            .sheet(isPresented: $showTrash) {
-                NavigationStack {
-                    TrashView()
-                        .environment(viewModel)
-                }
-            }
-            .task {
-                await viewModel.checkPermissionAndFetch()
-            }
         }
     }
 
@@ -66,16 +51,19 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Stats（Liquid Glass 卡片）
+    // MARK: - Stats
 
     private var statsSection: some View {
-        GlassEffectContainer(spacing: 12) {
+        VStack(spacing: 12) {
             HStack(spacing: 0) {
                 statBox("已审查", "\(viewModel.totalReviewed)", "checkmark.circle", .green)
+                Divider().frame(height: 50).padding(.vertical, 6)
                 statBox("待删除", "\(viewModel.allDeletedPhotos.count)", "trash", .red)
+                Divider().frame(height: 50).padding(.vertical, 6)
                 statBox("已保留", "\(viewModel.totalKept)", "heart", .blue)
             }
         }
+        .background(Color(.systemBackground).clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.06), radius: 8))
     }
 
     private func statBox(_ title: String, _ value: String, _ icon: String, _ color: Color) -> some View {
@@ -91,10 +79,9 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
     }
 
-    // MARK: - Buttons（Liquid Glass）
+    // MARK: - Start Button
 
     private var startButton: some View {
         Button {
@@ -109,28 +96,11 @@ struct HomeView: View {
                 .font(.title3.bold())
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
+                .foregroundStyle(.white)
+                .background(Capsule().fill(Color.blue.gradient.shadow(color: .blue.opacity(0.25), radius: 4)))
         }
-        .buttonStyle(.glassProminent)
-        .tint(.blue)
+        .buttonStyle(.plain)
         .disabled(viewModel.isLoading)
-    }
-
-    private var trashButton: some View {
-        Button {
-            showTrash = true
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "archivebox")
-                Text("回收站")
-                if !viewModel.allDeletedPhotos.isEmpty {
-                    Text("\(viewModel.allDeletedPhotos.count)")
-                        .foregroundColor(.red)
-                        .fontWeight(.bold)
-                }
-            }
-            .font(.headline)
-            .foregroundColor(.secondary)
-        }
-        .glassEffect(.regular.interactive())
+        .opacity(viewModel.isLoading ? 0.6 : 1.0)
     }
 }

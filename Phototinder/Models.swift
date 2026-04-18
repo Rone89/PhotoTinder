@@ -1,6 +1,7 @@
 import Foundation
 import Photos
 import CoreLocation
+import UIKit
 
 enum ReviewStatus {
     case unreviewed, keep, delete
@@ -29,7 +30,7 @@ struct PhotoMetadata: Sendable {
     let pixelHeight: Int
     let fileSize: String?
     let deviceName: String?
-    let duration: String?  // 视频时长，图片为 nil
+    let duration: String?
 }
 
 extension PhotoMetadata {
@@ -37,60 +38,29 @@ extension PhotoMetadata {
     static func from(_ asset: PHAsset) -> PhotoMetadata {
         PhotoMetadata(
             creationDate: asset.creationDate,
-            locationName: asset.location.flatMap { locationString($0) },
+            locationName: asset.location.flatMap { formatLocation($0) },
             pixelWidth: asset.pixelWidth,
             pixelHeight: asset.pixelHeight,
             fileSize: formatFileSize(asset),
-            deviceName: nil,  // 需要加载数据才能获取
+            deviceName: nil,
             duration: asset.mediaType == .video ? formatDuration(asset.duration) : nil
-        )
-    }
-    
-    /// 异步获取完整元信息（包括需要加载数据的设备名）
-    static async func fullFrom(_ asset: PHAsset) -> PhotoMetadata {
-        let base = from(asset)
-        
-        // 通过 imageData 获取设备信息
-        var device: String? = nil
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let options = PHImageRequestOptions()
-            options.isSynchronous = false
-            options.isNetworkAccessAllowed = true
-            PHImageManager.default().requestImageData(for: asset, options: options) { data, _, _, _ in
-                if let data {
-                    device = extractDevice(from: data)
-                }
-                continuation.resume()
-            }
-        }
-        
-        return PhotoMetadata(
-            creationDate: base.creationDate,
-            locationName: base.locationName,
-            pixelWidth: base.pixelWidth,
-            pixelHeight: base.pixelHeight,
-            fileSize: base.fileSize,
-            deviceName: device,
-            duration: base.duration
         )
     }
     
     // MARK: - Helpers
     
-    private static func locationString(_ location: CLLocation) -> String? {
-        // 简单格式：纬度,经度（反向地理编码太慢，先用坐标）
+    private static func formatLocation(_ location: CLLocation) -> String? {
         let lat = String(format: "%.4f", location.coordinate.latitude)
         let lon = String(format: "%.4f", location.coordinate.longitude)
         return "\(lat), \(lon)"
     }
     
     private static func formatFileSize(_ asset: PHAsset) -> String? {
-        // PHAsset 没有直接暴露文件大小，返回像素尺寸作为替代
         let pixels = asset.pixelWidth * asset.pixelHeight
         if pixels < 1_000_000 {
-            return "\(pixels / 1000)K 像素"
+            return "\(pixels / 1000)K px"
         } else {
-            return String(format: "%.1fM 像素", Double(pixels) / 1_000_000.0)
+            return String(format: "%.1fM px", Double(pixels) / 1_000_000.0)
         }
     }
     
@@ -99,20 +69,37 @@ extension PhotoMetadata {
         let secs = Int(seconds) % 60
         return "\(mins):\(String(format: "%02d", secs))"
     }
-    
-    private static func extractDevice(from data: Data) -> String? {
-        let imgSource = CGImageSourceCreateWithData(data as CFData, nil)
-        guard let properties = imgSource.flatMap({ CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [String: Any]) else {
-            return nil
+}
+
+// MARK: - 异步提取完整元信息（设备名等需要加载数据）
+
+/// 通过 PHAsset 异步获取设备名等信息
+func fetchDeviceName(for asset: PHAsset) async -> String? {
+    await withCheckedContinuation { continuation in
+        let options = PHImageRequestOptions()
+        options.isSynchronous = false
+        options.isNetworkAccessAllowed = true
+        PHImageManager.default().requestImageData(for: asset, options: options) { data, _, _, _ in
+            if let data {
+                continuation.resume(returning: extractDevice(from: data))
+            } else {
+                continuation.resume(returning: nil)
+            }
         }
-        // 尝试多种 EXIF 键
-        if let tiffProps = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] {
-            return tiffProps[kCGImagePropertyTIFFModel as String] as? String
-                   ?? tiffProps["Make"] as? String
-        }
-        if let exifProps = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] {
-            return exifProps["LensModel"] as? String
-        }
-        return nil
     }
+}
+
+private func extractDevice(from data: Data) -> String? {
+    guard let imgSource = CGImageSourceCreateWithData(data as CFData, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(imgSource, 0, nil) as? [String: Any]
+    else { return nil }
+    
+    if let tiffProps = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] {
+        return tiffProps[kCGImagePropertyTIFFModel as String] as? String
+               ?? tiffProps["Make"] as? String
+    }
+    if let exifProps = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] {
+        return exifProps["LensModel"] as? String
+    }
+    return nil
 }

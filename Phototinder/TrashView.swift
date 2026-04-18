@@ -59,7 +59,6 @@ struct TrashView: View {
                         Label("全部恢复", systemImage: "arrow.uturn.left")
                             .font(.subheadline)
                     }
-                    .glassEffect(.regular.interactive())
                     
                     Button {
                         isEditMode = true
@@ -161,7 +160,7 @@ struct TrashView: View {
     // MARK: - 底部统计
 
     private var statsBar: some View {
-        GlassEffectContainer(spacing: 12) {
+        VStack(spacing: 12) {
             HStack(spacing: 20) {
                 VStack(spacing: 4) {
                     Text("\(trashItems.count)")
@@ -205,7 +204,8 @@ struct TrashView: View {
                 .buttonStyle(.plain)
             }
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .padding(16)
+        .background(Color(.systemBackground).clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.06), radius: 8))
     }
 
     private func checkBadge(_ item: PhotoItem) -> some View {
@@ -289,7 +289,7 @@ struct ZoomableImageView: View {
                     }
                 }
                 .animation(.spring(response: 0.2, dampingFraction: 0.85), value: scale)
-                .animation(.smooth(duration: 0.15), value: translation)
+                .animation(.easeInOut(duration: 0.15), value: translation)
         }
     }
 

@@ -5,8 +5,7 @@ struct SummaryView: View {
         VStack(spacing: 20) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 60))
-                .foregroundColor(.green)
-                .glassEffect(.regular.tint(.green), in: .circle)
+                .foregroundStyle(.green.gradient)
             Text("审查完成")
                 .font(.title.bold())
         }
