@@ -4,7 +4,7 @@ import Photos
 struct DeleteTrayView: View {
     @Environment(PhotoViewModel.self) var viewModel
     let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -31,7 +31,7 @@ struct ThumbnailView: View {
     let asset: PHAsset
     @State private var image: UIImage?
     @State private var didLoad = false
-    
+
     var body: some View {
         Color.gray.opacity(0.2)
             .aspectRatio(1, contentMode: .fill)
@@ -46,18 +46,31 @@ struct ThumbnailView: View {
             .onAppear {
                 guard !didLoad else { return }
                 didLoad = true
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.deliveryMode = .highQualityFormat
-                options.resizeMode = .exact
-                PHImageManager.default().requestImage(
-                    for: asset,
-                    targetSize: CGSize(width: 200, height: 200),
-                    contentMode: .aspectFill,
-                    options: options
-                ) { image, _ in
-                    self.image = image
-                }
+                loadFileSync()
             }
+    }
+
+    private func loadFileSync() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let options = PHImageRequestOptions()
+            options.isNetworkAccessAllowed = true
+            options.deliveryMode = .highQualityFormat
+            options.resizeMode = .exact
+            options.isSynchronous = true
+
+            var result: UIImage?
+            PHImageManager.default().requestImage(
+                for: asset,
+                targetSize: CGSize(width: 200, height: 200),
+                contentMode: .aspectFill,
+                options: options
+            ) { img, _ in
+                result = img
+            }
+
+            DispatchQueue.main.async {
+                self.image = result
+            }
+        }
     }
 }
