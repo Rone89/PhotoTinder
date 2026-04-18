@@ -35,8 +35,8 @@ struct ThumbnailView: View {
             .overlay { if let image = image { Image(uiImage: image).resizable().scaledToFill() } }
             .clipped()
             .onAppear {
-                PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 200, height: 200), contentMode: .aspectFill, options: nil) { [weak self] image, _ in
-                    self?.image = image
+                PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 200, height: 200), contentMode: .aspectFill, options: nil) { image, _ in
+                    self.image = image
                 }
             }
     }
