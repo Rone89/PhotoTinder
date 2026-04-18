@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @State private var viewModel = PhotoViewModel()
+    @State private var showTrash = false
     
     var body: some View {
         NavigationStack {
@@ -22,8 +23,18 @@ struct HomeView: View {
             }
             .navigationTitle("照片清理")
             .task { await viewModel.checkPermissionAndFetch() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showTrash = true } label: {
+                        Image(systemName: "trash.circle")
+                    }
+                }
+            }
             .fullScreenCover(isPresented: Binding(get: { viewModel.currentGroupIndex != nil }, set: { if !$0 { viewModel.currentGroupIndex = nil } })) {
                 ReviewView().environment(viewModel)
+            }
+            .sheet(isPresented: $showTrash) {
+                TrashView().environment(viewModel)
             }
         }
     }
