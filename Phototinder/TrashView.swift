@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import PhotosUI
 
 struct TrashView: View {
     @Environment(PhotoViewModel.self) var viewModel
