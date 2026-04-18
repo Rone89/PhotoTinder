@@ -24,8 +24,6 @@ struct TrashView: View {
         return trashItems.count
     }
 
-    // MARK: - Body
-
     var body: some View {
         Group {
             if trashItems.isEmpty {
@@ -42,15 +40,20 @@ struct TrashView: View {
         }
         .fullScreenCover(isPresented: $showDetail) {
             if let item = selectedItem {
-                TrashDetailView(item: item, onRestore: {
-                    viewModel.restoreFromTrash(item)
-                    showDetail = false
-                }, onDelete: {
-                    deleteSingle(item)
-                    showDetail = false
-                }, onClose: {
-                    showDetail = false
-                })
+                TrashDetailView(
+                    item: item,
+                    onRestore: {
+                        viewModel.restoreFromTrash(item)
+                        showDetail = false
+                    },
+                    onDelete: {
+                        deleteSingle(item)
+                        showDetail = false
+                    },
+                    onClose: {
+                        showDetail = false
+                    }
+                )
             }
         }
         .alert("确认删除", isPresented: $showConfirmDeleteAlert) {
@@ -66,7 +69,7 @@ struct TrashView: View {
         }
     }
 
-    // MARK: - States
+    // MARK: - 子视图
 
     private var emptyState: some View {
         ContentUnavailableView {
@@ -94,7 +97,7 @@ struct TrashView: View {
                     checkBadge(item)
                 }
             }
-            .overlay(alignment: .bottomLeading) {
+            .overlay {
                 if isEditMode && selectedIds.contains(item.id) {
                     Color.blue.opacity(0.3)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -248,7 +251,7 @@ struct TrashView: View {
     }
 }
 
-// MARK: - TrashDetailView（不嵌套 NavigationStack，直接用 ZStack + 浮动按钮）
+// MARK: - TrashDetailView（纯 ZStack，不嵌套 NavigationStack，用浮动按钮）
 
 struct TrashDetailView: View {
     let item: PhotoItem
@@ -264,6 +267,7 @@ struct TrashDetailView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
+            // 图片区域
             if let uiImage = image {
                 Image(uiImage: uiImage)
                     .resizable()
@@ -283,33 +287,31 @@ struct TrashDetailView: View {
                     .tint(.white)
             }
 
-            // 顶部按钮
+            // 顶部浮动按钮
             VStack {
                 HStack {
                     Button(action: onClose) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title)
                             .foregroundColor(.white)
-                            .background(Circle().fill(.black.opacity(0.3)).padding(2))
                     }
+                    .padding(20)
                     Spacer()
-                    Button(action: { showMenu.toggle() }) {
+                    Button(action: { withAnimation { showMenu.toggle() } }) {
                         Image(systemName: "ellipsis.circle.fill")
                             .font(.title)
                             .foregroundColor(.white)
-                            .background(Circle().fill(.black.opacity(0.3)).padding(2))
                     }
+                    .padding(20)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 50)
                 Spacer()
             }
 
-            // 底部菜单
+            // 底部操作菜单（自定义，不依赖系统 Menu）
             if showMenu {
                 VStack(spacing: 0) {
                     Button(action: {
-                        showMenu = false
+                        withAnimation { showMenu = false }
                         onRestore()
                     }) {
                         HStack {
@@ -317,14 +319,15 @@ struct TrashDetailView: View {
                             Text("移出回收站")
                             Spacer()
                         }
-                        .padding()
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
                         .foregroundColor(.blue)
                     }
 
                     Divider().background(Color.white.opacity(0.3))
 
                     Button(role: .destructive, action: {
-                        showMenu = false
+                        withAnimation { showMenu = false }
                         onDelete()
                     }) {
                         HStack {
@@ -332,70 +335,43 @@ struct TrashDetailView: View {
                             Text("永久删除")
                             Spacer()
                         }
-                        .padding()
-                        .foregroundColor(.red)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
                     }
 
                     Divider().background(Color.white.opacity(0.3))
 
-                    Button(action: { showMenu = false }) {
+                    Button(action: { withAnimation { showMenu = false } }) {
                         HStack {
                             Text("取消")
                             Spacer()
                         }
-                        .padding()
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
                         .foregroundColor(.white)
                     }
                 }
                 .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .cornerRadius(14)
                 .padding(.horizontal, 40)
                 .padding(.bottom, 60)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .task(id: item.id) {
-            await loadImage()
-        }
-    }
-
-    private func loadImage() async {
-        image = nil
-        loadFailed = false
-
-        var loaded = await requestImage(size: CGSize(width: 1500, height: 2000))
-        if loaded == nil {
-            loaded = await requestImage(size: PHImageManagerMaximumSize)
-        }
-        if loaded == nil {
-            loaded = await requestImage(size: CGSize(width: 600, height: 800))
-        }
-
-        if let loaded = loaded {
-            image = loaded
-        } else {
-            loadFailed = true
-        }
-    }
-
-    private func requestImage(size: CGSize) async -> UIImage? {
-        await withCheckedContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.isNetworkAccessAllowed = true
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact
-            options.isSynchronous = true
-
-            var result: UIImage?
-            PHImageManager.default().requestImage(
-                for: item.asset,
-                targetSize: size,
-                contentMode: .aspectFit,
-                options: options
-            ) { img, _ in
-                result = img
+            image = nil
+            loadFailed = false
+            let sizes: [CGSize] = [
+                CGSize(width: 1500, height: 2000),
+                PHImageManagerMaximumSize,
+                CGSize(width: 600, height: 800)
+            ]
+            let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
+            if let result = result {
+                image = result
+            } else {
+                loadFailed = true
             }
-            continuation.resume(returning: result)
         }
     }
 }
