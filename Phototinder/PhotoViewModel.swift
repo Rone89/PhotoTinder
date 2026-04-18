@@ -9,7 +9,7 @@ class PhotoViewModel {
     var currentIndex: Int = 0
     var batchNumber: Int = 0
 
-    // MARK: - 跨批次追踪
+    // MARK: - 跨批次追踪（关键：防止已审查照片重复出现）
     var seenAssetIds: Set<String> = []
     var totalReviewed: Int = 0
     var totalKept: Int = 0
@@ -40,8 +40,9 @@ class PhotoViewModel {
         currentPhotos.filter { $0.status != .unreviewed }.count
     }
 
+    /// 一轮是否完成（所有照片都已审查）
     var isBatchComplete: Bool {
-        currentBatchReviewedCount >= currentPhotos.count && !currentPhotos.isEmpty
+        !currentPhotos.isEmpty && currentIndex >= currentPhotos.count
     }
 
     // MARK: - 加载照片
@@ -62,6 +63,7 @@ class PhotoViewModel {
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let allPhotos = PHAsset.fetchAssets(with: .image, options: fetchOptions)
 
+        // 关键：排除所有已见过的 asset ID，确保不会重复
         var available: [PHAsset] = []
         allPhotos.enumerateObjects { [self] asset, _, _ in
             if !seenAssetIds.contains(asset.localIdentifier) {
@@ -77,6 +79,7 @@ class PhotoViewModel {
         available.shuffle()
         let selected = Array(available.prefix(count))
 
+        // 将选中的 ID 加入已见集合（加载后立即记录）
         for asset in selected {
             seenAssetIds.insert(asset.localIdentifier)
         }
@@ -87,7 +90,10 @@ class PhotoViewModel {
         isReviewing = true
     }
 
-    func loadNextBatch() async {
+    /// 开始新一轮（重置当前批次但保留 seenAssetIds 和回收站）
+    func startNewRound() async {
+        currentPhotos = []
+        currentIndex = 0
         await loadRandomPhotos()
     }
 
@@ -119,19 +125,11 @@ class PhotoViewModel {
 
     private func advanceCard() {
         currentIndex += 1
-        if isBatchComplete {
-            Task { await loadNextBatch() }
-        }
+        // 不再自动加载下一轮！一轮完成后由 UI 层决定返回主页
     }
 
     /// 右滑 = 返回上一张（不修改状态）
     func goToPrevious() {
-        guard currentIndex > 0 else { return }
-        currentIndex -= 1
-    }
-
-    /// 返回上一张（内部使用）
-    private func goBack() {
         guard currentIndex > 0 else { return }
         currentIndex -= 1
     }
@@ -214,7 +212,7 @@ class PhotoViewModel {
         allDeletedPhotos.removeAll { $0.id == id }
     }
 
-    // MARK: - 重置
+    // MARK: - 重置（完全重新开始）
 
     func reset() {
         currentPhotos = []

@@ -66,16 +66,16 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Stats
+    // MARK: - Stats（Liquid Glass 卡片）
 
     private var statsSection: some View {
-        HStack(spacing: 0) {
-            statBox("已审查", "\(viewModel.totalReviewed)", "checkmark.circle", .green)
-            statBox("待删除", "\(viewModel.allDeletedPhotos.count)", "trash", .red)
-            statBox("已保留", "\(viewModel.totalKept)", "heart", .blue)
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 0) {
+                statBox("已审查", "\(viewModel.totalReviewed)", "checkmark.circle", .green)
+                statBox("待删除", "\(viewModel.allDeletedPhotos.count)", "trash", .red)
+                statBox("已保留", "\(viewModel.totalKept)", "heart", .blue)
+            }
         }
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private func statBox(_ title: String, _ value: String, _ icon: String, _ color: Color) -> some View {
@@ -91,9 +91,10 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
     }
 
-    // MARK: - Buttons
+    // MARK: - Buttons（Liquid Glass）
 
     private var startButton: some View {
         Button {
@@ -109,7 +110,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.glassProminent)
         .tint(.blue)
         .disabled(viewModel.isLoading)
     }
@@ -130,5 +131,6 @@ struct HomeView: View {
             .font(.headline)
             .foregroundColor(.secondary)
         }
+        .glassEffect(.regular.interactive())
     }
 }
