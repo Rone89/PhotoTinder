@@ -13,6 +13,7 @@ class PhotoViewModel {
     var seenAssetIds: Set<String> = []
     var totalReviewed: Int = 0
     var totalKept: Int = 0
+    var totalCleaned: Int = 0
 
     // MARK: - 跨批次回收站（持久保存）
     var allDeletedPhotos: [PhotoItem] = []
@@ -178,6 +179,7 @@ class PhotoViewModel {
         let assets = items.map { $0.asset }
         let ids = Set(items.map { $0.id })
         try? await PhotoLibraryService.shared.deleteAssets(assets)
+        totalCleaned += items.count
         allDeletedPhotos.removeAll { ids.contains($0.id) }
         let before = currentPhotos.count
         currentPhotos.removeAll { ids.contains($0.id) }
@@ -193,6 +195,7 @@ class PhotoViewModel {
         let ids = Set(allDeletedPhotos.map { $0.id })
         guard !assets.isEmpty else { return }
         try? await PhotoLibraryService.shared.deleteAssets(assets)
+        totalCleaned += assets.count
         allDeletedPhotos.removeAll()
         let before = currentPhotos.count
         currentPhotos.removeAll { ids.contains($0.id) }
@@ -220,6 +223,7 @@ class PhotoViewModel {
         seenAssetIds = []
         totalReviewed = 0
         totalKept = 0
+        totalCleaned = 0
         batchNumber = 0
         allDeletedPhotos = []
         hasMorePhotos = true

@@ -1,24 +1,18 @@
 import SwiftUI
 import Photos
-import MapKit
-
-/// 照片元信息面板 —— 显示在审查界面的照片下方
 struct PhotoInfoPanel: View {
     let asset: PHAsset
-    @State private var metadata: PhotoMetadata?
-    
-    // 展开/收起状态
+    @State private var deviceName: String? = nil
     @State private var isExpanded = false
-    
+
     var body: some View {
         VStack(spacing: 0) {
-            // 点击展开/收起
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     isExpanded.toggle()
                 }
-                if metadata == nil {
-                    Task { metadata = await PhotoMetadata.fullFrom(asset) }
+                if deviceName == nil && isExpanded {
+                    Task { deviceName = await fetchDeviceName(for: asset) }
                 }
             } label: {
                 HStack(spacing: 8) {
@@ -28,18 +22,16 @@ struct PhotoInfoPanel: View {
                     Text(isExpanded ? "收起信息" : "照片详情")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(.primary)
-                    
+
                     Spacer()
-                    
-                    // 快速预览：时间 + 尺寸
+
                     quickPreview
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
-            
-            // 展开后的详细信息
+
             if isExpanded {
                 detailGrid
                     .padding(.horizontal, 12)
@@ -54,25 +46,36 @@ struct PhotoInfoPanel: View {
         )
     }
 
-    // MARK: - 快速预览（始终可见）
-    
+
+    // MARK: - 快速预览
+
     private var quickPreview: some View {
         HStack(spacing: 8) {
+            // Live Photo 标记
+            if asset.mediaSubtypes.contains(.photoLive) {
+                Image(systemName: "livephoto")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.orange))
+            }
+
             if let date = asset.creationDate {
                 Text(formatDate(date))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
-                
-                Text("\u{00B7}")
+
+                Text("·")
                     .foregroundColor(Color(.tertiaryLabel))
             }
-            
-            Text("\(asset.pixelWidth) \u00D7 \(asset.pixelHeight)")
+
+            Text("\(asset.pixelWidth) × \(asset.pixelHeight)")
                 .font(.caption.monospacedDigit())
                 .foregroundColor(.secondary)
-            
+
             if asset.location != nil {
-                Text("\u{00B7}")
+                Text("·")
                     .foregroundColor(Color(.tertiaryLabel))
                 Image(systemName: "location.fill")
                     .font(.system(size: 9))
@@ -89,22 +92,30 @@ struct PhotoInfoPanel: View {
             GridItem(.flexible())
         ], spacing: 10) {
             infoRow(icon: "calendar", title: "拍摄时间", value: asset.creationDate.map { fullDate($0) } ?? "未知")
-            
+
             infoRow(icon: "crop", title: "分辨率", value: "\(asset.pixelWidth) × \(asset.pixelHeight)")
-            
+
+            // Live Photo 信息
+            if asset.mediaSubtypes.contains(.photoLive) {
+                infoRow(icon: "livephoto", title: "类型", value: "Live Photo")
+            } else {
+                infoRow(icon: "photo", title: "类型", value: "静态照片")
+            }
+
             locationRow
-            
-            infoRow(icon: "iphone", title: "设备", value: metadata?.deviceName ?? "加载中...")
-            
-            infoRow(icon: "photo", title: "文件大小", value: metadata?.fileSize ?? "计算中...")
+
+            infoRow(icon: "iphone", title: "设备", value: deviceName ?? "加载中...")
+
+            infoRow(icon: "doc", title: "文件大小", value: formatFileSize(asset))
         }
-        .animation(.easeInOut(duration: 0.2), value: metadata)
+        .animation(.easeInOut(duration: 0.2), value: deviceName)
     }
 
     @ViewBuilder
     private var locationRow: some View {
         if let loc = asset.location {
-            infoRow(icon: "mappin.circle.fill", title: "位置", value: "\(String(format: "%.4f", loc.coordinate.latitude)), \(String(format: "%.4f", loc.coordinate.longitude))")
+            infoRow(icon: "mappin.circle.fill", title: "位置",
+                   value: "\(String(format: "%.4f", loc.coordinate.latitude)), \(String(format: "%.4f", loc.coordinate.longitude))")
         } else {
             infoRow(icon: "location.slash", title: "位置", value: "无位置信息")
         }
@@ -116,7 +127,7 @@ struct PhotoInfoPanel: View {
                 .font(.caption)
                 .foregroundColor(.blue.opacity(0.7))
                 .frame(width: 20)
-            
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.caption2)
@@ -126,7 +137,7 @@ struct PhotoInfoPanel: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
-            
+
             Spacer()
         }
         .padding(8)
@@ -134,7 +145,7 @@ struct PhotoInfoPanel: View {
         .cornerRadius(8)
     }
 
-    // MARK: - 日期格式化
+    // MARK: - 格式化
 
     private func formatDate(_ date: Date) -> String {
         let fmt = DateFormatter()
@@ -147,5 +158,11 @@ struct PhotoInfoPanel: View {
         fmt.dateStyle = .long
         fmt.timeStyle = .short
         return fmt.string(from: date)
+    }
+
+    private func formatFileSize(_ asset: PHAsset) -> String {
+        let pixels = asset.pixelWidth * asset.pixelHeight
+        if pixels < 1_000_000 { return "\(pixels / 1000)K px" }
+        return String(format: "%.1fM px", Double(pixels) / 1_000_000.0)
     }
 }
