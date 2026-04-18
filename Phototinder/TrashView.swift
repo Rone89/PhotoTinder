@@ -7,20 +7,27 @@ struct TrashView: View {
     @State private var showConfirmDeleteAlert = false
     @State private var showDeleteSuccessAlert = false
     @State private var lastDeletedCount = 0
+    @State private var selectedItem: PhotoItem?
+    @State private var showDetail = false
+    @State private var showRestoreAlert = false
 
     let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
 
     private var contentBody: some View {
         Group {
             if viewModel.trashGroups.isEmpty {
-                ContentUnavailableView {
-                    Label("回收站为空", systemImage: "trash")
-                } description: {
-                    Text("没有待删除的照片")
-                }
+                emptyView
             } else {
                 trashScrollView
             }
+        }
+    }
+
+    private var emptyView: some View {
+        ContentUnavailableView {
+            Label("回收站为空", systemImage: "trash")
+        } description: {
+            Text("没有待删除的照片")
         }
     }
 
@@ -75,11 +82,15 @@ struct TrashView: View {
                             .background(Circle().fill(.white).padding(1))
                             .padding(4)
                     }
+                    .onTapGesture {
+                        selectedItem = item
+                        showDetail = true
+                    }
                     .contextMenu {
                         Button {
                             viewModel.restoreFromTrash(item)
                         } label: {
-                            Label("恢复", systemImage: "arrow.uturn.left")
+                            Label("移出回收站", systemImage: "arrow.uturn.left")
                         }
                         Button(role: .destructive) {
                             deleteSingleItem(item)
@@ -133,6 +144,19 @@ struct TrashView: View {
                 } message: {
                     Text("已成功删除 \(lastDeletedCount) 张照片")
                 }
+                .fullScreenCover(isPresented: $showDetail) {
+                    if let item = selectedItem {
+                        TrashDetailView(item: item) {
+                            viewModel.restoreFromTrash(item)
+                            showDetail = false
+                        } onDelete: {
+                            deleteSingleItem(item)
+                            showDetail = false
+                        } onDismiss: {
+                            showDetail = false
+                        }
+                    }
+                }
         }
     }
 
@@ -169,6 +193,83 @@ struct TrashView: View {
 
             lastDeletedCount = allDeleteAssets.count
             showDeleteSuccessAlert = true
+        }
+    }
+}
+
+// MARK: - Trash Detail View (大图查看)
+
+struct TrashDetailView: View {
+    let item: PhotoItem
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+    let onDismiss: () -> Void
+
+    @State private var image: UIImage?
+    @State private var isLoading = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if let image = image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding()
+                } else if isLoading {
+                    ProgressView()
+                        .scaleEffect(2)
+                        .tint(.white)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("关闭") { onDismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            onRestore()
+                        } label: {
+                            Label("移出回收站", systemImage: "arrow.uturn.left")
+                        }
+                        Button(role: .destructive) {
+                            onDelete()
+                        } label: {
+                            Label("立即删除", systemImage: "trash.fill")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .onAppear {
+                loadImage()
+            }
+        }
+    }
+
+    private func loadImage() {
+        guard image == nil, !isLoading else { return }
+        isLoading = true
+
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .highQualityFormat
+        options.resizeMode = .exact
+
+        PHImageManager.default().requestImage(
+            for: item.asset,
+            targetSize: PHImageManagerMaximumSize,
+            contentMode: .aspectFit,
+            options: options
+        ) { image, _ in
+            self.image = image
+            self.isLoading = false
         }
     }
 }
