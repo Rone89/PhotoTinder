@@ -9,6 +9,7 @@ class PhotoViewModel {
     var monthGroups: [MonthGroup] = []
     var currentGroupIndex: Int? = nil
     var currentCardIndex: Int = 0
+    var showRecoveryAlert = false
     
     var currentGroup: MonthGroup? {
         guard let index = currentGroupIndex, monthGroups.indices.contains(index) else { return nil }
@@ -59,6 +60,14 @@ class PhotoViewModel {
         let assets = monthGroups[gIdx].items.filter { $0.status == .delete }.map { $0.asset }
         try? await PhotoLibraryService.shared.deleteAssets(assets)
         monthGroups[gIdx].items.removeAll { $0.status == .delete }
+    }
+    
+    func recoverAsset(_ asset: PHAsset) async {
+        showRecoveryAlert = true
+    }
+    
+    func permanentDelete(_ assets: [PHAsset]) async {
+        try? await PhotoLibraryService.shared.permanentDeleteAssets(assets)
     }
 }
 
