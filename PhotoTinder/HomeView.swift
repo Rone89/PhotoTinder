@@ -174,21 +174,17 @@ struct HomeView: View {
             HStack(spacing: 12) {
                 Button(action: handlePrimaryAction) {
                     Label(primaryActionTitle, systemImage: primaryActionSymbol)
-                        .frame(maxWidth: .infinity)
+                        .liquidActionLabel(tint: PhotoTinderPalette.accent, prominent: true)
                 }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
+                .buttonStyle(.plain)
                 .disabled(viewModel.isLoading || (!viewModel.hasMorePhotos && viewModel.isBatchComplete))
 
                 if viewModel.totalReviewed > 0 {
                     Button("重新开始", role: .destructive) {
                         viewModel.reset()
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .tint(PhotoTinderPalette.rose)
+                    .buttonStyle(.plain)
+                    .liquidActionLabel(tint: PhotoTinderPalette.rose)
                 }
             }
         }
