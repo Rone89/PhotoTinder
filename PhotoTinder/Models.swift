@@ -2,7 +2,7 @@ import Foundation
 import Photos
 import UIKit
 
-enum ReviewStatus {
+enum ReviewStatus: String, Codable {
     case unreviewed, keep, delete
 }
 
