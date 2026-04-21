@@ -52,10 +52,11 @@ struct ReviewView: View {
                         }
                     } label: {
                         Image(systemName: "xmark")
+                            .font(.headline.weight(.semibold))
+                            .padding(14)
+                            .glassEffect(.regular.interactive())
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -64,9 +65,12 @@ struct ReviewView: View {
                             showDeleteTray = true
                         } label: {
                             Label("\(viewModel.currentBatchDeletedCount)", systemImage: "trash")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .glassEffect(.regular.interactive())
                         }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.capsule)
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -110,11 +114,9 @@ struct ReviewView: View {
                 viewModel.isReviewing = false
             } label: {
                 Label("返回主页", systemImage: "house.fill")
-                    .frame(maxWidth: .infinity)
+                    .liquidActionLabel(tint: PhotoTinderPalette.accent, prominent: true)
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
+            .buttonStyle(.plain)
             .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -146,22 +148,18 @@ struct ReviewView: View {
                             viewModel.isReviewing = false
                         } label: {
                             Label("回到主页", systemImage: "house.fill")
-                                .frame(maxWidth: .infinity)
+                                .liquidActionLabel(tint: PhotoTinderPalette.accent)
                         }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.large)
+                        .buttonStyle(.plain)
 
                         if viewModel.hasMorePhotos {
                             Button {
                                 Task { await viewModel.startNewRound() }
                             } label: {
                                 Label("下一轮", systemImage: "sparkles")
-                                    .frame(maxWidth: .infinity)
+                                    .liquidActionLabel(tint: PhotoTinderPalette.accent, prominent: true)
                             }
-                            .buttonStyle(.glassProminent)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.large)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -213,7 +211,7 @@ struct ReviewView: View {
                 .animation(.easeInOut(duration: 0.2), value: viewModel.currentIndex)
         }
         .padding(16)
-        .glassBackgroundEffect()
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     private var swipeOverlay: some View {
@@ -260,12 +258,9 @@ struct ReviewView: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .labelStyle(.titleAndIcon)
-                .frame(maxWidth: .infinity)
+                .liquidActionLabel(tint: tint, prominent: prominent)
         }
-        .buttonStyle(prominent ? .glassProminent : .glass)
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
-        .tint(tint)
+        .buttonStyle(.plain)
     }
 
     private var cardDragGesture: some Gesture {
