@@ -217,45 +217,35 @@ struct TrashView: View {
                         isEditMode = false
                     } label: {
                         Label("移出选中", systemImage: "arrow.uturn.left")
-                            .frame(maxWidth: .infinity)
+                            .liquidActionLabel(tint: PhotoTinderPalette.accent)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
                     .disabled(selectedIds.isEmpty)
 
                     Button(role: .destructive) {
                         showConfirmDeleteAlert = true
                     } label: {
                         Label("删除选中", systemImage: "trash.fill")
-                            .frame(maxWidth: .infinity)
+                            .liquidActionLabel(tint: PhotoTinderPalette.rose, prominent: true)
                     }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .tint(PhotoTinderPalette.rose)
+                    .buttonStyle(.plain)
                     .disabled(selectedIds.isEmpty)
                 } else {
                     Button {
                         viewModel.restoreAllFromTrash()
                     } label: {
                         Label("全部恢复", systemImage: "arrow.counterclockwise")
-                            .frame(maxWidth: .infinity)
+                            .liquidActionLabel(tint: PhotoTinderPalette.accent)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
 
                     Button(role: .destructive) {
                         showConfirmDeleteAlert = true
                     } label: {
                         Label("永久删除", systemImage: "trash.fill")
-                            .frame(maxWidth: .infinity)
+                            .liquidActionLabel(tint: PhotoTinderPalette.rose, prominent: true)
                     }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .tint(PhotoTinderPalette.rose)
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -357,22 +347,17 @@ struct TrashDetailView: View {
                         onRestore()
                     } label: {
                         Label("移出回收站", systemImage: "arrow.uturn.left")
-                            .frame(maxWidth: .infinity)
+                            .liquidActionLabel(tint: PhotoTinderPalette.accent)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
 
                     Button(role: .destructive) {
                         onDelete()
                     } label: {
                         Label("永久删除", systemImage: "trash.fill")
-                            .frame(maxWidth: .infinity)
+                            .liquidActionLabel(tint: PhotoTinderPalette.rose, prominent: true)
                     }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .tint(PhotoTinderPalette.rose)
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 20)
