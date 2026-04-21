@@ -1,299 +1,275 @@
-import SwiftUI
 import Photos
 import PhotosUI
+import SwiftUI
 
 struct ReviewView: View {
-    @Environment(PhotoViewModel.self) var viewModel
-    @Environment(\.dismiss) var dismiss
-    @Environment(\.horizontalSizeClass) var sizeClass
+    @Environment(PhotoViewModel.self) private var viewModel
+
     @State private var dragOffset: CGSize = .zero
     @State private var showDeleteTray = false
+
+    private enum SwipeAction {
+        case keep
+        case delete
+        case goBack
+    }
+
+    private var currentStep: Int {
+        guard !viewModel.currentPhotos.isEmpty else { return 0 }
+        return min(viewModel.currentIndex + 1, viewModel.currentPhotos.count)
+    }
+
+    private var showsActionDock: Bool {
+        !viewModel.currentPhotos.isEmpty && !viewModel.isBatchComplete && !viewModel.isLoading
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+                AmbientBackdrop()
 
-                if viewModel.isLoading && viewModel.currentPhotos.isEmpty {
-                    loadingView
-                } else if viewModel.currentPhotos.isEmpty {
-                    noPhotosView
-                } else if viewModel.isBatchComplete {
-                    batchCompleteView
-                } else if let photo = viewModel.currentPhoto {
-                    mainContent(photo: photo)
+                Group {
+                    if viewModel.isLoading && viewModel.currentPhotos.isEmpty {
+                        loadingView
+                    } else if viewModel.currentPhotos.isEmpty {
+                        noPhotosView
+                    } else if viewModel.isBatchComplete {
+                        batchCompleteView
+                    } else if let photo = viewModel.currentPhoto {
+                        reviewContent(for: photo)
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
             }
-            .navigationTitle("第 \(viewModel.batchNumber) 轮")
+            .navigationTitle(viewModel.batchNumber == 0 ? "照片审查" : "第 \(viewModel.batchNumber) 轮")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
                             viewModel.isReviewing = false
                         }
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(.secondary)
+                        Image(systemName: "xmark")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
                 }
+
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if viewModel.currentBatchDeletedCount > 0 {
-                        Button { showDeleteTray = true } label: {
+                        Button {
+                            showDeleteTray = true
+                        } label: {
                             Label("\(viewModel.currentBatchDeletedCount)", systemImage: "trash")
-                                .font(.subheadline)
-                                .padding(8)
-                                .background(.ultraThinMaterial, in: Capsule())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
                     }
                 }
             }
             .sheet(isPresented: $showDeleteTray) {
                 DeleteTrayView()
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .safeAreaInset(edge: .bottom) {
+                if showsActionDock {
+                    buttonsRow
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+                }
             }
         }
     }
-
-    // MARK: - 子视图
 
     private var loadingView: some View {
         VStack(spacing: 16) {
             ProgressView()
                 .controlSize(.large)
-                .tint(.blue)
-            Text("加载照片中...")
+
+            Text("正在载入这批照片…")
                 .font(.headline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var noPhotosView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 64))
-                .foregroundStyle(.quaternary)
-            Text("没有更多照片了")
-                .font(.title2.weight(.medium))
-                .foregroundColor(.secondary)
-            Text("所有照片已审查完毕")
-                .font(.subheadline)
-                .foregroundColor(Color(.tertiaryLabel))
-            Button("返回主页") {
+        VStack(spacing: 18) {
+            ContentUnavailableView(
+                "没有更多照片了",
+                systemImage: "photo.on.rectangle.angled",
+                description: Text("当前相册里没有新的照片可供审查。")
+            )
+
+            Button {
                 viewModel.isReviewing = false
+            } label: {
+                Label("返回主页", systemImage: "house.fill")
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
             .controlSize(.large)
+            .padding(.horizontal, 32)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var batchCompleteView: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 22) {
             Spacer()
+
+            VStack(alignment: .leading, spacing: 18) {
+                Label("本轮已完成", systemImage: "checkmark.seal.fill")
+                    .font(.headline.weight(.semibold))
+
+                Text("第 \(viewModel.batchNumber) 轮已经整理完毕。")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+
+                Text("你已经完成了 \(viewModel.currentPhotos.count) 张照片的快速筛选，现在可以回到主页继续管理回收站，或者直接开始下一轮。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    StatTile(title: "保留", value: "\(viewModel.currentBatchKeptCount)", systemImage: "heart.fill", tint: PhotoTinderPalette.success)
+                    StatTile(title: "删除", value: "\(viewModel.currentBatchDeletedCount)", systemImage: "trash.fill", tint: PhotoTinderPalette.rose)
+                }
+
+                GlassEffectContainer(spacing: 12) {
+                    HStack(spacing: 12) {
+                        Button {
+                            viewModel.isReviewing = false
+                        } label: {
+                            Label("回到主页", systemImage: "house.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+
+                        if viewModel.hasMorePhotos {
+                            Button {
+                                Task { await viewModel.startNewRound() }
+                            } label: {
+                                Label("下一轮", systemImage: "sparkles")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.glassProminent)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.large)
+                        }
+                    }
+                }
+            }
+            .dashboardPanel()
+
+            Spacer()
+        }
+    }
+
+    private func reviewContent(for photo: PhotoItem) -> some View {
+        VStack(spacing: 18) {
+            progressPanel
 
             ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.1))
-                    .frame(width: 120, height: 120)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.green, .mint], startPoint: .top, endPoint: .bottom)
-                    )
+                PhotoCardView(item: photo)
+                    .padding(.horizontal, 4)
+                    .id(photo.id)
+                    .offset(x: dragOffset.width, y: dragOffset.height)
+                    .rotationEffect(.degrees(Double(dragOffset.width) / 28.0))
+                    .gesture(cardDragGesture)
+                    .overlay(alignment: .center) {
+                        swipeOverlay
+                    }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Text("第 \(viewModel.batchNumber) 轮完成！")
-                .font(.title2.bold())
-
-            HStack(spacing: 50) {
-                statLabel("保留", "\(viewModel.currentBatchKeptCount)", .green, "heart.fill")
-                statLabel("删除", "\(viewModel.currentBatchDeletedCount)", .red, "trash.fill")
-            }
-
-            Text("共审查 \(viewModel.currentPhotos.count) 张")
-                .font(.subheadline)
-                .foregroundColor(Color(.tertiaryLabel))
-
-            Spacer()
-
-            Button {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    viewModel.isReviewing = false
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "house.fill")
-                    Text("返回主页")
-                }
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 40)
-
-            if viewModel.hasMorePhotos {
-                Button {
-                    Task { await viewModel.startNewRound() }
-                } label: {
-                    Text("再来一轮")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.blue)
-                }
-                .padding(.top, 12)
-                .padding(.bottom, 40)
-            } else {
-                Text("所有照片已审查完毕")
-                    .font(.caption)
-                    .foregroundColor(Color(.tertiaryLabel))
-                    .padding(.bottom, 40)
-            }
+            PhotoInfoPanel(asset: photo.asset)
+                .padding(.bottom, 8)
         }
     }
 
-    private func statLabel(_ title: String, _ value: String, _ color: Color, _ icon: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-            Text(value).font(.title.bold()).foregroundColor(color)
-            Text(title).font(.caption).foregroundColor(.secondary)
-        }
-    }
+    private var progressPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                Text("左滑保留，上滑删除，右滑返回")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
 
-    // MARK: - 主内容区
+                Spacer()
 
-    /// iPad 上照片卡片限制最大宽度，iPhone 撑满
-    private var cardMaxWidth: CGFloat {
-        sizeClass == .regular ? 700 : .infinity
-    }
-
-    @ViewBuilder
-    private func mainContent(photo: PhotoItem) -> some View {
-        GeometryReader { geo in
-            VStack(spacing: 0) {
-                // 进度条
-                progressBar
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-
-                // 照片卡片区（根据照片比例自动调整）
-                ZStack {
-                    PhotoCardView(item: photo)
-                        .frame(maxWidth: cardMaxWidth, maxHeight: .infinity)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .id(photo.id)
-                        .offset(x: dragOffset.width, y: dragOffset.height)
-                        .rotationEffect(.degrees(Double(dragOffset.width) / 25.0))
-                        .gesture(cardDragGesture)
-                        .overlay(alignment: .center) { swipeOverlay }
-                }
-
-                // 照片信息面板
-                PhotoInfoPanel(asset: photo.asset)
-                    .padding(.horizontal, 16)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                // 操作按钮行
-                buttonsRow
-                    .padding(.bottom, safeBottomInset + 8)
+                Text("\(currentStep) / \(max(viewModel.currentPhotos.count, 1))")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
             }
-        }
-    }
 
-    private var safeBottomInset: CGFloat {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else { return 34 }
-        return window.safeAreaInsets.bottom
-    }
-
-    // MARK: - 进度条
-
-    private var progressBar: some View {
-        VStack(spacing: 3) {
-            Text("\(min(viewModel.currentIndex + 1, viewModel.currentPhotos.count)) / \(viewModel.currentPhotos.count)")
-                .font(.caption2.monospacedDigit())
-                .foregroundColor(Color(.tertiaryLabel))
-
-            ProgressView(value: Double(min(viewModel.currentIndex, viewModel.currentPhotos.count)), total: Double(max(viewModel.currentPhotos.count, 1)))
-                .tint(.blue)
+            ProgressView(value: Double(currentStep), total: Double(max(viewModel.currentPhotos.count, 1)))
+                .tint(PhotoTinderPalette.accent)
                 .animation(.easeInOut(duration: 0.2), value: viewModel.currentIndex)
         }
+        .padding(16)
+        .glassBackgroundEffect()
     }
-
-    // MARK: - 滑动覆盖层
 
     private var swipeOverlay: some View {
         Group {
             if dragOffset.width < -80 {
-                overlayBadge(text: "✓ 保留", color: .green)
+                overlayBadge(text: "保留")
             } else if dragOffset.width > 80 {
-                overlayBadge(text: "← 返回", color: .orange)
+                overlayBadge(text: "返回")
             } else if dragOffset.height < -80 {
-                overlayBadge(text: "✕ 删除", color: .red)
+                overlayBadge(text: "删除")
             }
         }
         .allowsHitTesting(false)
     }
 
-    private func overlayBadge(text: String, color: Color) -> some View {
+    private func overlayBadge(text: String) -> some View {
         Text(text)
-            .font(.largeTitle.bold())
-            .foregroundColor(color.opacity(0.75))
-            .shadow(color: color.opacity(0.3), radius: 10)
-            .scaleEffect(0.9 + min(abs(dragOffset.width) / 300.0, abs(dragOffset.height) / 300.0, 0.15))
+            .font(.title2.weight(.bold))
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .glassEffect()
+            .scaleEffect(0.92 + min(max(abs(dragOffset.width), abs(dragOffset.height)) / 240.0, 0.14))
     }
-
-    // MARK: - 按钮行
 
     private var buttonsRow: some View {
-        HStack(spacing: 36) {
-            actionButton(icon: "arrow.left", label: "保留", color: .green) {
-                performSwipe(action: .keep)
-            }
-            actionButton(icon: "arrow.up", label: "删除", color: .red) {
-                performSwipe(action: .delete)
-            }
-            actionButton(icon: "arrow.right", label: "返回", color: .orange) {
-                performSwipe(action: .goBack)
+        GlassEffectContainer(spacing: 14) {
+            HStack(spacing: 12) {
+                actionButton(title: "保留", systemImage: "arrow.left", tint: PhotoTinderPalette.success, prominent: false) {
+                    performSwipe(action: .keep)
+                }
+
+                actionButton(title: "删除", systemImage: "arrow.up", tint: PhotoTinderPalette.rose, prominent: true) {
+                    performSwipe(action: .delete)
+                }
+
+                actionButton(title: "返回", systemImage: "arrow.right", tint: PhotoTinderPalette.sun, prominent: false) {
+                    performSwipe(action: .goBack)
+                }
             }
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 28)
-        .background(.ultraThinMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
     }
 
-    private func actionButton(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
+    private func actionButton(title: String, systemImage: String, tint: Color, prominent: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(color)
-                    .symbolRenderingMode(.hierarchical)
-                Text(label)
-                    .font(.caption2.weight(.medium))
-                    .foregroundColor(color.opacity(0.9))
-            }
-            .frame(width: 66, height: 56)
+            Label(title, systemImage: systemImage)
+                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(prominent ? .glassProminent : .glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .tint(tint)
     }
-
-    // MARK: - 手势
-
-    private enum SwipeAction { case keep, delete, goBack }
 
     private var cardDragGesture: some Gesture {
-        DragGesture(minimumDistance: 30)
+        DragGesture(minimumDistance: 24)
             .onChanged { value in
                 dragOffset = value.translation
             }
@@ -311,18 +287,16 @@ struct ReviewView: View {
                     } else {
                         resetDrag()
                     }
+                } else if dy < -threshold {
+                    performSwipe(action: .delete)
                 } else {
-                    if dy < -threshold {
-                        performSwipe(action: .delete)
-                    } else {
-                        resetDrag()
-                    }
+                    resetDrag()
                 }
             }
     }
 
     private func resetDrag() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.74)) {
             dragOffset = .zero
         }
     }
@@ -330,77 +304,92 @@ struct ReviewView: View {
     private func performSwipe(action: SwipeAction) {
         let target: CGSize
         switch action {
-        case .keep:  target = CGSize(width: -1000, height: 0)
-        case .delete: target = CGSize(width: 0, height: -1000)
-        case .goBack: target = CGSize(width: 1000, height: 0)
+        case .keep:
+            target = CGSize(width: -1000, height: 0)
+        case .delete:
+            target = CGSize(width: 0, height: -1000)
+        case .goBack:
+            target = CGSize(width: 1000, height: 0)
         }
-        withAnimation(.easeOut(duration: 0.22)) { dragOffset = target }
+
+        withAnimation(.easeOut(duration: 0.22)) {
+            dragOffset = target
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             dragOffset = .zero
+
             switch action {
-            case .keep:   viewModel.markAsKeptAndAdvance()
-            case .delete: viewModel.markForDeletionAndAdvance()
-            case .goBack: viewModel.goToPrevious()
+            case .keep:
+                viewModel.markAsKeptAndAdvance()
+            case .delete:
+                viewModel.markForDeletionAndAdvance()
+            case .goBack:
+                viewModel.goToPrevious()
             }
         }
     }
 }
 
-// MARK: - PhotoCardView（审查界面照片卡片，根据照片比例自动调整大小）
-
 struct PhotoCardView: View {
-    @Environment(\.horizontalSizeClass) var sizeClass
     let item: PhotoItem
+
     @State private var livePhotoView: PHLivePhotoView?
     @State private var isLivePhoto = false
     @State private var isPlayingLive = false
+    @State private var isHDR = false
 
-    /// 根据照片像素计算宽高比
     private var photoAspectRatio: CGFloat {
-        let w = CGFloat(item.asset.pixelWidth)
-        let h = CGFloat(item.asset.pixelHeight)
-        guard w > 0, h > 0 else { return 3.0 / 4.0 }
-        return w / h
+        let width = CGFloat(item.asset.pixelWidth)
+        let height = CGFloat(item.asset.pixelHeight)
+        guard width > 0, height > 0 else { return 3.0 / 4.0 }
+        return width / height
     }
 
     var body: some View {
         ZStack {
-            // Live Photo
             if isLivePhoto, let livePhotoView {
                 LivePhotoViewRepresentable(livePhotoView: livePhotoView, isPlaying: $isPlayingLive)
             } else {
-                // 普通静态照片
                 StaticPhotoView(item: item)
             }
 
-            // LIVE 标记（左上角）
-            if isLivePhoto {
+            if isLivePhoto || isHDR {
                 VStack {
-                    HStack {
-                        liveBadge
+                    HStack(spacing: 8) {
+                        if isLivePhoto {
+                            MediaBadge(title: "LIVE", symbol: "livephoto")
+                        }
+
+                        if isHDR {
+                            MediaBadge(title: "HDR", symbol: nil)
+                        }
+
                         Spacer()
                     }
                     Spacer()
                 }
-                .padding(12)
+                .padding(16)
             }
         }
-        // 根据照片实际比例自动调整卡片大小
         .aspectRatio(photoAspectRatio, contentMode: .fit)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemGray6))
-                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(.white.opacity(0.28))
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(.white.opacity(0.24), lineWidth: 0.9)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 28, y: 18)
+        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
         .task(id: item.id) {
             isLivePhoto = item.asset.mediaSubtypes.contains(.photoLive)
+            isHDR = item.asset.mediaSubtypes.contains(.photoHDR)
             if isLivePhoto {
                 loadLivePhoto()
             }
         }
-        // 长按播放 Live Photo
         .onLongPressGesture(minimumDuration: 0.1) {
             if isLivePhoto {
                 isPlayingLive = true
@@ -411,28 +400,6 @@ struct PhotoCardView: View {
             }
         }
     }
-
-    // MARK: - LIVE 标记
-
-    private var liveBadge: some View {
-        Text("LIVE")
-            .font(.system(size: 11, weight: .black, design: .rounded))
-            .tracking(1.2)
-            .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(.black.opacity(0.5))
-                    .blur(radius: 1)
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
-            )
-    }
-
-    // MARK: - 加载 Live Photo
 
     private func loadLivePhoto() {
         let targetSize = CGSize(width: 1024, height: 1024)
@@ -451,17 +418,16 @@ struct PhotoCardView: View {
                 let view = PHLivePhotoView()
                 view.contentMode = .scaleAspectFit
                 view.livePhoto = livePhoto
-                view.isMuted = true
+                view.isMuted = false
                 self.livePhotoView = view
             }
         }
     }
 }
 
-// MARK: - StaticPhotoView（普通静态照片）
-
 struct StaticPhotoView: View {
     let item: PhotoItem
+
     @State private var image: UIImage?
     @State private var loadFailed = false
 
@@ -473,36 +439,37 @@ struct StaticPhotoView: View {
 
     var body: some View {
         Group {
-            if let ui = image {
-                Image(uiImage: ui)
+            if let image {
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
             } else if loadFailed {
                 VStack(spacing: 10) {
                     Image(systemName: "photo.badge.exclamationmark")
                         .font(.title2)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
+
                     Text("无法加载此照片")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             } else {
                 ProgressView()
                     .controlSize(.large)
-                    .tint(.gray)
             }
         }
         .task(id: item.id) {
             image = nil
             loadFailed = false
             let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
-            if let result { image = result }
-            else { loadFailed = true }
+            if let result {
+                image = result
+            } else {
+                loadFailed = true
+            }
         }
     }
 }
-
-// MARK: - LivePhotoViewRepresentable
 
 struct LivePhotoViewRepresentable: UIViewRepresentable {
     let livePhotoView: PHLivePhotoView

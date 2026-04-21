@@ -1,0 +1,133 @@
+name: Release Unsigned IPA
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, for example v1.0.0"
+        required: true
+        default: "v0.1.0"
+      release_name:
+        description: "Optional release title"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.release_tag }}"
+            NAME="${{ inputs.release_name }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            NAME=""
+          fi
+
+          if [[ -z "${NAME}" ]]; then
+            NAME="PhotoTinder ${TAG}"
+          fi
+
+          SAFE_TAG="${TAG#v}"
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "name=${NAME}" >> "${GITHUB_OUTPUT}"
+          echo "ipa_name=PhotoTinder-${SAFE_TAG}-unsigned.ipa" >> "${GITHUB_OUTPUT}"
+
+      - name: Select Xcode 26.4
+        shell: bash
+        run: |
+          XCODE_APP="/Applications/Xcode_26.4.app"
+
+          if [[ ! -d "${XCODE_APP}" ]]; then
+            echo "Expected ${XCODE_APP} to exist on the macos-26 runner." >&2
+            ls /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+
+          sudo xcode-select -s "${XCODE_APP}/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        shell: bash
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        shell: bash
+        run: xcodegen generate
+
+      - name: Archive app
+        shell: bash
+        run: |
+          xcodebuild archive \
+            -project PhotoTinder.xcodeproj \
+            -scheme PhotoTinder \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "${RUNNER_TEMP}/PhotoTinder.xcarchive" \
+            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          APP_PATH="$(find "${RUNNER_TEMP}/PhotoTinder.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)"
+
+          if [[ -z "${APP_PATH}" ]]; then
+            echo "Unable to locate built .app inside the archive." >&2
+            exit 1
+          fi
+
+          PAYLOAD_DIR="${RUNNER_TEMP}/Payload"
+          IPA_PATH="${RUNNER_TEMP}/${{ steps.meta.outputs.ipa_name }}"
+
+          rm -rf "${PAYLOAD_DIR}"
+          mkdir -p "${PAYLOAD_DIR}"
+          cp -R "${APP_PATH}" "${PAYLOAD_DIR}/"
+          ditto -c -k --sequesterRsrc --keepParent "${PAYLOAD_DIR}" "${IPA_PATH}"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: ${{ runner.temp }}/${{ steps.meta.outputs.ipa_name }}
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_NAME: ${{ steps.meta.outputs.name }}
+          IPA_PATH: ${{ runner.temp }}/${{ steps.meta.outputs.ipa_name }}
+        run: |
+          NOTES="Unsigned IPA built with Xcode 26.4 and the iOS 26 SDK on GitHub Actions. Installing on a physical device still requires Apple signing certificates and provisioning profiles."
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${IPA_PATH}" --clobber
+            gh release edit "${RELEASE_TAG}" --title "${RELEASE_NAME}" --notes "${NOTES}"
+          else
+            gh release create "${RELEASE_TAG}" "${IPA_PATH}" \
+              --title "${RELEASE_NAME}" \
+              --notes "${NOTES}" \
+              --target "${GITHUB_SHA}"
+          fi

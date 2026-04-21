@@ -1,168 +1,169 @@
-import SwiftUI
 import Photos
+import SwiftUI
+
 struct PhotoInfoPanel: View {
     let asset: PHAsset
-    @State private var deviceName: String? = nil
+
+    @State private var deviceName: String?
     @State private var isExpanded = false
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    isExpanded.toggle()
-                }
-                if deviceName == nil && isExpanded {
-                    Task { deviceName = await fetchDeviceName(for: asset) }
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundColor(.secondary)
-                    Text(isExpanded ? "收起信息" : "照片详情")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.primary)
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
 
-                    Spacer()
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            LazyVGrid(columns: columns, spacing: 12) {
+                detailTile(title: "拍摄时间", value: asset.creationDate.map(fullDate) ?? "未知", systemImage: "calendar")
+                detailTile(title: "分辨率", value: "\(asset.pixelWidth) × \(asset.pixelHeight)", systemImage: "crop")
+                detailTile(title: "类型", value: mediaTypeText, systemImage: mediaTypeSymbol)
+                detailTile(title: "设备", value: deviceName ?? "轻点后加载", systemImage: "iphone")
+                detailTile(title: "位置", value: locationText, systemImage: asset.location == nil ? "location.slash" : "mappin.circle.fill")
+                detailTile(title: "像素规模", value: formatFileSize(asset), systemImage: "doc.text.magnifyingglass")
+            }
+            .padding(.top, 14)
+            .animation(.easeInOut(duration: 0.2), value: deviceName)
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    Label("照片详情", systemImage: "info.circle")
+                        .font(.headline.weight(.semibold))
+
+                    Spacer(minLength: 12)
 
                     quickPreview
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.plain)
 
-            if isExpanded {
-                detailGrid
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                Text(isExpanded ? "收起元数据面板" : "展开查看时间、设备、位置和照片类型。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
-        )
+        .padding(18)
+        .glassBackgroundEffect()
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 0.8)
+        }
+        .onChange(of: isExpanded) { _, expanded in
+            guard expanded, deviceName == nil else { return }
+            Task { deviceName = await fetchDeviceName(for: asset) }
+        }
     }
-
-
-    // MARK: - 快速预览
 
     private var quickPreview: some View {
-        HStack(spacing: 8) {
-            // Live Photo 标记
-            if asset.mediaSubtypes.contains(.photoLive) {
-                Image(systemName: "livephoto")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(.orange))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                previewBadges
+                previewDate
+                previewResolution
+                previewLocation
             }
 
-            if let date = asset.creationDate {
-                Text(formatDate(date))
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
-
-                Text("·")
-                    .foregroundColor(Color(.tertiaryLabel))
-            }
-
-            Text("\(asset.pixelWidth) × \(asset.pixelHeight)")
-                .font(.caption.monospacedDigit())
-                .foregroundColor(.secondary)
-
-            if asset.location != nil {
-                Text("·")
-                    .foregroundColor(Color(.tertiaryLabel))
-                Image(systemName: "location.fill")
-                    .font(.system(size: 9))
-                    .foregroundColor(.blue)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    previewBadges
+                    previewDate
+                    previewResolution
+                    previewLocation
+                }
             }
         }
     }
 
-    // MARK: - 详细网格
-
-    private var detailGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: 10) {
-            infoRow(icon: "calendar", title: "拍摄时间", value: asset.creationDate.map { fullDate($0) } ?? "未知")
-
-            infoRow(icon: "crop", title: "分辨率", value: "\(asset.pixelWidth) × \(asset.pixelHeight)")
-
-            // Live Photo 信息
+    private var previewBadges: some View {
+        HStack(spacing: 6) {
             if asset.mediaSubtypes.contains(.photoLive) {
-                infoRow(icon: "livephoto", title: "类型", value: "Live Photo")
-            } else {
-                infoRow(icon: "photo", title: "类型", value: "静态照片")
+                MediaBadge(title: "LIVE", symbol: "livephoto")
             }
 
-            locationRow
-
-            infoRow(icon: "iphone", title: "设备", value: deviceName ?? "加载中...")
-
-            infoRow(icon: "doc", title: "文件大小", value: formatFileSize(asset))
+            if asset.mediaSubtypes.contains(.photoHDR) {
+                MediaBadge(title: "HDR", symbol: nil)
+            }
         }
-        .animation(.easeInOut(duration: 0.2), value: deviceName)
     }
 
     @ViewBuilder
-    private var locationRow: some View {
-        if let loc = asset.location {
-            infoRow(icon: "mappin.circle.fill", title: "位置",
-                   value: "\(String(format: "%.4f", loc.coordinate.latitude)), \(String(format: "%.4f", loc.coordinate.longitude))")
-        } else {
-            infoRow(icon: "location.slash", title: "位置", value: "无位置信息")
+    private var previewDate: some View {
+        if let date = asset.creationDate {
+            Text(formatDate(date))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
     }
 
-    private func infoRow(icon: String, title: String, value: String) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundColor(.blue.opacity(0.7))
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundColor(Color(.tertiaryLabel))
-                Text(value)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-
-            Spacer()
-        }
-        .padding(8)
-        .background(Color(.systemGray6).opacity(0.5))
-        .cornerRadius(8)
+    private var previewResolution: some View {
+        Text("\(asset.pixelWidth) × \(asset.pixelHeight)")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
     }
 
-    // MARK: - 格式化
+    @ViewBuilder
+    private var previewLocation: some View {
+        if asset.location != nil {
+            Image(systemName: "location.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(PhotoTinderPalette.accent)
+        }
+    }
+
+    private var mediaTypeText: String {
+        if asset.mediaSubtypes.contains(.photoLive) {
+            return "Live Photo"
+        }
+        if asset.mediaSubtypes.contains(.photoHDR) {
+            return "HDR 照片"
+        }
+        return "静态照片"
+    }
+
+    private var mediaTypeSymbol: String {
+        if asset.mediaSubtypes.contains(.photoLive) {
+            return "livephoto"
+        }
+        return "photo"
+    }
+
+    private var locationText: String {
+        guard let location = asset.location else { return "无位置信息" }
+        return "\(String(format: "%.4f", location.coordinate.latitude)), \(String(format: "%.4f", location.coordinate.longitude))"
+    }
+
+    private func detailTile(title: String, value: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+        .padding(14)
+        .glassBackgroundEffect()
+    }
 
     private func formatDate(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MM/dd HH:mm"
-        return fmt.string(from: date)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd HH:mm"
+        return formatter.string(from: date)
     }
 
     private func fullDate(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateStyle = .long
-        fmt.timeStyle = .short
-        return fmt.string(from: date)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     private func formatFileSize(_ asset: PHAsset) -> String {
         let pixels = asset.pixelWidth * asset.pixelHeight
-        if pixels < 1_000_000 { return "\(pixels / 1000)K px" }
+        if pixels < 1_000_000 {
+            return "\(pixels / 1000)K px"
+        }
         return String(format: "%.1fM px", Double(pixels) / 1_000_000.0)
     }
 }

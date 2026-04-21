@@ -1,10 +1,10 @@
-import SwiftUI
 import Photos
 import PhotosUI
+import SwiftUI
 
 struct TrashView: View {
-    @Environment(PhotoViewModel.self) var viewModel
-    @Environment(\.horizontalSizeClass) var sizeClass
+    @Environment(PhotoViewModel.self) private var viewModel
+
     @State private var showConfirmDeleteAlert = false
     @State private var showDeleteSuccessAlert = false
     @State private var lastDeletedCount = 0
@@ -12,74 +12,80 @@ struct TrashView: View {
     @State private var isEditMode = false
     @State private var selectedIds: Set<String> = []
 
-    /// 固定 3 列网格
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 3)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
-    private var trashItems: [PhotoItem] { viewModel.allDeletedPhotos }
+    private var trashItems: [PhotoItem] {
+        viewModel.allDeletedPhotos
+    }
 
     private var deleteTargetCount: Int {
-        if isEditMode && !selectedIds.isEmpty { return selectedIds.count }
+        if isEditMode && !selectedIds.isEmpty {
+            return selectedIds.count
+        }
         return trashItems.count
     }
 
-    /// iPad 上内容区域使用更大宽度
-    private var contentMaxWidth: CGFloat {
-        sizeClass == .regular ? 800 : .infinity
+    private var actionTitle: String {
+        if isEditMode && !selectedIds.isEmpty {
+            return "已选择 \(selectedIds.count) 张"
+        }
+        return "待处理 \(trashItems.count) 张"
     }
 
     var body: some View {
-        Group {
-            if trashItems.isEmpty {
-                emptyTrashView
-            } else {
-                trashGrid
+        ZStack {
+            AmbientBackdrop()
+
+            Group {
+                if trashItems.isEmpty {
+                    ContentUnavailableView {
+                        Label("回收站为空", systemImage: "archivebox")
+                    } description: {
+                        Text("在审查时标记为删除的照片会出现在这里。")
+                    }
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 20) {
+                            overviewPanel
+                            trashGrid
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 150)
+                    }
+                }
             }
         }
         .navigationTitle("回收站")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if isEditMode {
-                    if !selectedIds.isEmpty {
-                        Button {
-                            viewModel.restoreSelectedFromTrash(selectedIds)
-                            selectedIds.removeAll()
+                if !trashItems.isEmpty {
+                    if isEditMode {
+                        Button("取消") {
                             isEditMode = false
-                        } label: {
-                            Label("移出", systemImage: "arrow.uturn.left.circle")
-                                .font(.subheadline).foregroundColor(.blue)
+                            selectedIds.removeAll()
                         }
-                        Button(role: .destructive) {
-                            showConfirmDeleteAlert = true
-                        } label: {
-                            Label("删除", systemImage: "trash.fill")
-                                .font(.subheadline)
+                    } else {
+                        Button("选择") {
+                            isEditMode = true
                         }
-                    }
-                    Button("取消") {
-                        isEditMode = false
-                        selectedIds.removeAll()
-                    }
-                } else if !trashItems.isEmpty {
-                    Button {
-                        viewModel.restoreAllFromTrash()
-                    } label: {
-                        Label("全部恢复", systemImage: "arrow.uturn.left")
-                            .font(.subheadline)
-                    }
 
-                    Button {
-                        isEditMode = true
-                    } label: {
-                        Label("选择", systemImage: "checkmark.circle")
-                            .font(.subheadline)
-                    }
+                        Menu {
+                            Button {
+                                viewModel.restoreAllFromTrash()
+                            } label: {
+                                Label("全部恢复", systemImage: "arrow.uturn.left")
+                            }
 
-                    Button(role: .destructive) {
-                        showConfirmDeleteAlert = true
-                    } label: {
-                        Label("全部删除", systemImage: "trash.fill")
-                            .font(.subheadline)
+                            Button(role: .destructive) {
+                                showConfirmDeleteAlert = true
+                            } label: {
+                                Label("全部删除", systemImage: "trash.fill")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
                     }
                 }
             }
@@ -96,10 +102,21 @@ struct TrashView: View {
                     selectedItem = nil
                 }
             )
+            .toolbar(.hidden, for: .tabBar)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if !trashItems.isEmpty {
+                actionDock
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 10)
+            }
         }
         .alert("确认删除", isPresented: $showConfirmDeleteAlert) {
             Button("取消", role: .cancel) {}
-            Button("删除", role: .destructive) { performDelete() }
+            Button("删除", role: .destructive) {
+                performDelete()
+            }
         } message: {
             Text("确定要永久删除 \(deleteTargetCount) 张照片吗？此操作不可撤销。")
         }
@@ -110,139 +127,156 @@ struct TrashView: View {
         }
     }
 
-    // MARK: - 空状态
+    private var overviewPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("清理总览", systemImage: "tray.full.fill")
+                .font(.headline.weight(.semibold))
 
-    private var emptyTrashView: some View {
-        ContentUnavailableView {
-            Label("回收站为空", systemImage: "archivebox")
-        } description: {
-            Text("在审查时标记为删除的照片会出现在这里")
+            Text(actionTitle)
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .monospacedDigit()
+
+            VStack(spacing: 10) {
+                StatusRow(title: "操作方式", value: isEditMode ? "多选模式" : "点按进入详情", systemImage: "cursorarrow.click")
+                StatusRow(title: "恢复入口", value: "原生底部玻璃按钮", systemImage: "arrow.uturn.backward.circle")
+                StatusRow(title: "永久删除", value: "系统确认弹窗", systemImage: "exclamationmark.shield")
+            }
         }
+        .dashboardPanel()
     }
-
-    // MARK: - 照片网格（1:1 缩略图，固定 3 列）
 
     private var trashGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 3) {
-                ForEach(trashItems) { item in
-                    MiniThumbnail(asset: item.asset)
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay(alignment: .topLeading) {
-                            if isEditMode { checkBadge(item) }
-                        }
-                        // Live Photo 小标记
-                        .overlay(alignment: .topTrailing) {
-                            if !isEditMode && item.asset.mediaSubtypes.contains(.photoLive) {
-                                Text("LIVE")
-                                    .font(.system(size: 8, weight: .black))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(Capsule().fill(.black.opacity(0.4)))
-                                    .padding(4)
-                            }
-                        }
-                        .overlay {
-                            if isEditMode && selectedIds.contains(item.id) {
-                                Color.blue.opacity(0.3)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                            }
-                        }
-                        .onTapGesture {
-                            if isEditMode {
-                                toggleSelection(item)
-                            } else {
-                                selectedItem = item
-                            }
-                        }
-                        .contextMenu {
-                            if !isEditMode {
-                                Button { viewModel.restoreFromTrash(item) } label: {
-                                    Label("移出回收站", systemImage: "arrow.uturn.left")
-                                }
-                                Button(role: .destructive) { deleteSingle(item) } label: {
-                                    Label("永久删除", systemImage: "trash.fill")
-                                }
-                            }
-                        }
-                }
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(trashItems) { item in
+                trashCell(for: item)
             }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: contentMaxWidth)
-            .frame(maxWidth: .infinity)
-
-            statsBar
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
-                .frame(maxWidth: contentMaxWidth)
-                .frame(maxWidth: .infinity)
         }
     }
 
-    // MARK: - 底部统计
-
-    private var statsBar: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 20) {
-                VStack(spacing: 4) {
-                    Text("\(trashItems.count)")
-                        .font(.title2.bold())
-                        .foregroundColor(.red)
-                    Text("待删除")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                Button(role: .destructive) {
-                    showConfirmDeleteAlert = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "trash.fill")
-                        Text("全部永久删除")
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.red.gradient, in: Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    viewModel.restoreAllFromTrash()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.counterclockwise")
-                        Text("全部恢复")
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.green.gradient, in: Capsule())
-                }
-                .buttonStyle(.plain)
+    private func trashCell(for item: PhotoItem) -> some View {
+        MiniThumbnail(asset: item.asset)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(.white.opacity(0.18), lineWidth: 0.8)
             }
-        }
-        .padding(16)
-        .background(Color(.systemBackground).clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.06), radius: 8))
+            .overlay(alignment: .topLeading) {
+                if isEditMode {
+                    checkBadge(for: item)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if !isEditMode {
+                    if item.asset.mediaSubtypes.contains(.photoLive) {
+                        MediaBadge(title: "LIVE", symbol: "livephoto")
+                            .padding(8)
+                    } else if item.asset.mediaSubtypes.contains(.photoHDR) {
+                        MediaBadge(title: "HDR", symbol: nil)
+                            .padding(8)
+                    }
+                }
+            }
+            .overlay {
+                if isEditMode && selectedIds.contains(item.id) {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(PhotoTinderPalette.accent.opacity(0.22))
+                }
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .onTapGesture {
+                if isEditMode {
+                    toggleSelection(item)
+                } else {
+                    selectedItem = item
+                }
+            }
+            .contextMenu {
+                if !isEditMode {
+                    Button {
+                        viewModel.restoreFromTrash(item)
+                    } label: {
+                        Label("移出回收站", systemImage: "arrow.uturn.left")
+                    }
+
+                    Button(role: .destructive) {
+                        deleteSingle(item)
+                    } label: {
+                        Label("永久删除", systemImage: "trash.fill")
+                    }
+                }
+            }
     }
 
-    private func checkBadge(_ item: PhotoItem) -> some View {
-        let sel = selectedIds.contains(item.id)
-        return Image(systemName: sel ? "checkmark.circle.fill" : "circle")
+    private var actionDock: some View {
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 12) {
+                if isEditMode {
+                    Button {
+                        viewModel.restoreSelectedFromTrash(selectedIds)
+                        selectedIds.removeAll()
+                        isEditMode = false
+                    } label: {
+                        Label("移出选中", systemImage: "arrow.uturn.left")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .disabled(selectedIds.isEmpty)
+
+                    Button(role: .destructive) {
+                        showConfirmDeleteAlert = true
+                    } label: {
+                        Label("删除选中", systemImage: "trash.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(PhotoTinderPalette.rose)
+                    .disabled(selectedIds.isEmpty)
+                } else {
+                    Button {
+                        viewModel.restoreAllFromTrash()
+                    } label: {
+                        Label("全部恢复", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+
+                    Button(role: .destructive) {
+                        showConfirmDeleteAlert = true
+                    } label: {
+                        Label("永久删除", systemImage: "trash.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(PhotoTinderPalette.rose)
+                }
+            }
+        }
+    }
+
+    private func checkBadge(for item: PhotoItem) -> some View {
+        let selected = selectedIds.contains(item.id)
+        return Image(systemName: selected ? "checkmark.circle.fill" : "circle")
             .font(.title3)
-            .foregroundStyle(sel ? Color.blue : Color.white)
-            .shadow(color: .black.opacity(0.15), radius: 1)
-            .padding(4)
+            .foregroundStyle(selected ? PhotoTinderPalette.accent : .white)
+            .padding(8)
+            .glassEffect()
+            .padding(6)
     }
 
     private func toggleSelection(_ item: PhotoItem) {
-        if selectedIds.contains(item.id) { selectedIds.remove(item.id) }
-        else { selectedIds.insert(item.id) }
+        if selectedIds.contains(item.id) {
+            selectedIds.remove(item.id)
+        } else {
+            selectedIds.insert(item.id)
+        }
     }
 
     private func deleteSingle(_ item: PhotoItem) {
@@ -274,10 +308,7 @@ struct TrashView: View {
     }
 }
 
-// MARK: - 回收站详情页（支持 Live Photo 长按播放）
-
 struct TrashDetailView: View {
-    @Environment(\.horizontalSizeClass) var sizeClass
     let item: PhotoItem
     let onRestore: () -> Void
     let onDelete: () -> Void
@@ -287,19 +318,7 @@ struct TrashDetailView: View {
     @State private var livePhotoView: PHLivePhotoView?
     @State private var isLivePhoto = false
     @State private var isPlayingLive = false
-
-    /// 根据照片像素计算宽高比
-    private var photoAspectRatio: CGFloat {
-        let w = CGFloat(item.asset.pixelWidth)
-        let h = CGFloat(item.asset.pixelHeight)
-        guard w > 0, h > 0 else { return 3.0 / 4.0 }
-        return w / h
-    }
-
-    /// iPad 上照片区域限制最大宽度
-    private var contentMaxWidth: CGFloat {
-        sizeClass == .regular ? 900 : .infinity
-    }
+    @State private var isHDR = false
 
     private let sizes: [CGSize] = [
         CGSize(width: 1500, height: 2000),
@@ -307,112 +326,132 @@ struct TrashDetailView: View {
         CGSize(width: 600, height: 800)
     ]
 
+    private var photoAspectRatio: CGFloat {
+        let width = CGFloat(item.asset.pixelWidth)
+        let height = CGFloat(item.asset.pixelHeight)
+        guard width > 0, height > 0 else { return 3.0 / 4.0 }
+        return width / height
+    }
+
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            AmbientBackdrop()
 
-            VStack(spacing: 0) {
-                // 照片区域（根据比例自动调整）
-                ZStack {
-                    if isLivePhoto, let livePhotoView {
-                        LivePhotoViewRepresentable(livePhotoView: livePhotoView, isPlaying: $isPlayingLive)
-                    } else if let ui = image {
-                        Image(uiImage: ui)
-                            .resizable()
-                            .scaledToFit()
-                    } else if loadFailed {
-                        errorContent
-                    } else {
-                        ProgressView().controlSize(.large).tint(.white)
-                    }
+            VStack(spacing: 18) {
+                photoArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    // LIVE 标记
-                    if isLivePhoto {
-                        VStack {
-                            HStack {
-                                liveBadge
-                                Spacer()
-                            }
-                            Spacer()
-                        }
-                        .padding(12)
-                    }
-                }
-                // 根据照片实际比例自动调整大小
-                .aspectRatio(photoAspectRatio, contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .frame(maxWidth: contentMaxWidth)
-                .frame(maxWidth: .infinity)
-                // 长按播放 Live Photo
-                .onLongPressGesture(minimumDuration: 0.1) {
-                    if isLivePhoto { isPlayingLive = true }
-                } onPressingChanged: { pressing in
-                    if !pressing && isPlayingLive { isPlayingLive = false }
-                }
-
-                // 照片信息面板
                 if image != nil || isLivePhoto {
                     PhotoInfoPanel(asset: item.asset)
-                        .padding(.horizontal, 16)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
         }
         .navigationTitle("照片详情")
         .navigationBarTitleDisplayMode(.inline)
-        .preferredColorScheme(.dark)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button { onRestore() } label: {
+        .safeAreaInset(edge: .bottom) {
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 12) {
+                    Button {
+                        onRestore()
+                    } label: {
                         Label("移出回收站", systemImage: "arrow.uturn.left")
+                            .frame(maxWidth: .infinity)
                     }
-                    Button(role: .destructive) { onDelete() } label: {
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
                         Label("永久删除", systemImage: "trash.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title3)
-                        .foregroundColor(.white)
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(PhotoTinderPalette.rose)
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
         }
         .task(id: item.id) {
             image = nil
             loadFailed = false
             isLivePhoto = item.asset.mediaSubtypes.contains(.photoLive)
+            isHDR = item.asset.mediaSubtypes.contains(.photoHDR)
 
             if isLivePhoto {
                 loadLivePhoto()
             } else {
                 let result = await PhotoLoader.loadWithFallback(for: item.asset, sizes: sizes)
-                if let result { image = result }
-                else { loadFailed = true }
+                if let result {
+                    image = result
+                } else {
+                    loadFailed = true
+                }
             }
         }
     }
 
-    // MARK: - LIVE 标记
+    private var photoArea: some View {
+        ZStack {
+            if isLivePhoto, let livePhotoView {
+                LivePhotoViewRepresentable(livePhotoView: livePhotoView, isPlaying: $isPlayingLive)
+            } else if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else if loadFailed {
+                errorContent
+            } else {
+                ProgressView()
+                    .controlSize(.large)
+            }
 
-    private var liveBadge: some View {
-        Text("LIVE")
-            .font(.system(size: 11, weight: .black, design: .rounded))
-            .tracking(1.2)
-            .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(.black.opacity(0.5))
-                    .blur(radius: 1)
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
-            )
+            if isLivePhoto || isHDR {
+                VStack {
+                    HStack(spacing: 8) {
+                        if isLivePhoto {
+                            MediaBadge(title: "LIVE", symbol: "livephoto")
+                        }
+
+                        if isHDR {
+                            MediaBadge(title: "HDR", symbol: nil)
+                        }
+
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            }
+        }
+        .aspectRatio(photoAspectRatio, contentMode: .fit)
+        .background(
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(.white.opacity(0.28))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .stroke(.white.opacity(0.24), lineWidth: 0.9)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+        .shadow(color: .black.opacity(0.14), radius: 28, y: 18)
+        .onLongPressGesture(minimumDuration: 0.1) {
+            if isLivePhoto {
+                isPlayingLive = true
+            }
+        } onPressingChanged: { pressing in
+            if !pressing && isPlayingLive {
+                isPlayingLive = false
+            }
+        }
     }
-
-    // MARK: - 加载 Live Photo
 
     private func loadLivePhoto() {
         let targetSize = CGSize(width: 1024, height: 1024)
@@ -431,7 +470,7 @@ struct TrashDetailView: View {
                 let view = PHLivePhotoView()
                 view.contentMode = .scaleAspectFit
                 view.livePhoto = livePhoto
-                view.isMuted = true
+                view.isMuted = false
                 self.livePhotoView = view
             }
         }
@@ -441,9 +480,10 @@ struct TrashDetailView: View {
         VStack(spacing: 12) {
             Image(systemName: "photo.badge.exclamationmark")
                 .font(.system(size: 50))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundStyle(.secondary)
+
             Text("无法加载此照片")
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundStyle(.secondary)
         }
     }
 }

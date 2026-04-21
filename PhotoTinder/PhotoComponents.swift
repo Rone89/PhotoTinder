@@ -17,6 +17,7 @@ enum PhotoLoader {
             options.deliveryMode = .opportunistic
             options.resizeMode = .fast
             options.isSynchronous = false
+            options.version = .current  // 获取当前版本（包含 HDR 渲染）
 
             PHImageManager.default().requestImage(
                 for: asset,
@@ -46,10 +47,12 @@ enum PhotoLoader {
 }
 
 // MARK: - MiniThumbnail（用于回收站网格、删除托盘）
+// 注意：不设 aspectRatio，由父级控制尺寸（网格 .aspectRatio(1, ...) 保证 1:1）
 
 struct MiniThumbnail: View {
     let asset: PHAsset
     @State private var image: UIImage?
+    @State private var loadFailed = false
 
     private let sizes: [CGSize] = [
         CGSize(width: 200, height: 200),
@@ -57,19 +60,35 @@ struct MiniThumbnail: View {
     ]
 
     var body: some View {
-        Rectangle()
-            .fill(Color(.systemGray5))
-            .aspectRatio(1, contentMode: .fit)
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(.white.opacity(0.18))
             .overlay {
                 if let ui = image {
-                    Image(uiImage: ui).resizable().scaledToFill().clipped()
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .clipped()
+                } else if loadFailed {
+                    Image(systemName: "photo")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
                 } else {
                     ProgressView().scaleEffect(0.8).tint(.gray)
                 }
             }
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(.white.opacity(0.16), lineWidth: 0.8)
+            }
             .task(id: asset.localIdentifier) {
                 image = nil
-                image = await PhotoLoader.loadWithFallback(for: asset, sizes: sizes, contentMode: .aspectFill)
+                loadFailed = false
+                let loadedImage = await PhotoLoader.loadWithFallback(for: asset, sizes: sizes, contentMode: .aspectFill)
+                if let loadedImage {
+                    image = loadedImage
+                } else {
+                    loadFailed = true
+                }
             }
     }
 }
