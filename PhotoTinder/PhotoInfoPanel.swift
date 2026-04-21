@@ -41,7 +41,7 @@ struct PhotoInfoPanel: View {
             }
         }
         .padding(18)
-        .glassBackgroundEffect()
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
         .overlay {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(.white.opacity(0.12), lineWidth: 0.8)
@@ -143,7 +143,7 @@ struct PhotoInfoPanel: View {
         }
         .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
         .padding(14)
-        .glassBackgroundEffect()
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     private func formatDate(_ date: Date) -> String {
