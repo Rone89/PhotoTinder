@@ -46,31 +46,12 @@ struct ReviewView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
-                            viewModel.isReviewing = false
-                        }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.headline.weight(.semibold))
-                            .padding(14)
-                            .glassEffect(.regular.interactive())
-                    }
-                    .buttonStyle(.plain)
+                    closeButton
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if viewModel.currentBatchDeletedCount > 0 {
-                        Button {
-                            showDeleteTray = true
-                        } label: {
-                            Label("\(viewModel.currentBatchDeletedCount)", systemImage: "trash")
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .glassEffect(.regular.interactive())
-                        }
-                        .buttonStyle(.plain)
+                        deleteTrayButton
                     }
                 }
             }
@@ -88,6 +69,53 @@ struct ReviewView: View {
                 }
             }
         }
+    }
+
+    private var closeButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                viewModel.isReviewing = false
+            }
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 40, height: 40)
+                .glassEffect(.regular.interactive())
+                .clipShape(Circle())
+                .overlay {
+                    Circle()
+                        .stroke(.white.opacity(0.18), lineWidth: 0.8)
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var deleteTrayButton: some View {
+        Button {
+            showDeleteTray = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "trash")
+                    .font(.system(size: 13, weight: .semibold))
+
+                Text("\(viewModel.currentBatchDeletedCount)")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(.primary)
+            .frame(height: 40)
+            .padding(.horizontal, 14)
+            .glassEffect(.regular.interactive())
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(.white.opacity(0.18), lineWidth: 0.8)
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var loadingView: some View {
