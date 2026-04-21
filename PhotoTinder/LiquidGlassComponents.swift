@@ -55,7 +55,7 @@ private struct DashboardPanelModifier: ViewModifier {
         content
             .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassBackgroundEffect()
+            .glassEffect(.regular, in: .rect(cornerRadius: 30))
             .overlay {
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .stroke(.white.opacity(0.14), lineWidth: 0.8)
@@ -66,6 +66,10 @@ private struct DashboardPanelModifier: ViewModifier {
 extension View {
     func dashboardPanel() -> some View {
         modifier(DashboardPanelModifier())
+    }
+
+    func liquidActionLabel(tint: Color, prominent: Bool = false) -> some View {
+        modifier(LiquidActionLabelModifier(tint: tint, prominent: prominent))
     }
 }
 
@@ -112,7 +116,7 @@ struct StatTile: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
-        .glassBackgroundEffect()
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
         .overlay {
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(.white.opacity(0.12), lineWidth: 0.8)
@@ -143,7 +147,7 @@ struct StatusRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .glassBackgroundEffect()
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
     }
 }
 
@@ -164,5 +168,20 @@ struct MediaBadge: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .glassEffect()
+    }
+}
+
+private struct LiquidActionLabelModifier: ViewModifier {
+    let tint: Color
+    let prominent: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .font(.headline.weight(.semibold))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(prominent ? Color.white : tint)
+            .glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive())
     }
 }
