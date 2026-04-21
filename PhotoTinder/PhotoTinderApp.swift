@@ -9,7 +9,7 @@ struct PhotoTinderApp: App {
             MainTabView()
                 .environment(viewModel)
                 .task {
-                    await viewModel.checkPermissionAndFetch()
+                    await viewModel.prepareForLaunch()
                 }
         }
     }
