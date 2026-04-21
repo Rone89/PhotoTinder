@@ -65,27 +65,14 @@ struct HomeView: View {
 
     private var heroPanel: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("把相册清理做成 iOS 26 原生节奏")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-
-                    Text("标准导航、标准标签栏、原生玻璃按钮和信息卡片都已经接管主流程，让界面更像系统应用，而不是自定义毛玻璃拼贴。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 12)
-
+            HStack(spacing: 18) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 32, style: .continuous)
                         .fill(.white.opacity(0.16))
-                        .frame(width: 110, height: 132)
+                        .frame(width: 96, height: 116)
 
                     Image(systemName: "photo.stack.fill")
-                        .font(.system(size: 42, weight: .semibold))
+                        .font(.system(size: 40, weight: .semibold))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [PhotoTinderPalette.accent, PhotoTinderPalette.turquoise],
@@ -95,25 +82,16 @@ struct HomeView: View {
                         )
                 }
                 .glassEffect()
-            }
-
-            ViewThatFits(in: .horizontal) {
-                GlassEffectContainer(spacing: 12) {
-                    HStack(spacing: 12) {
-                        FeatureChip(title: "Liquid Glass", systemImage: "sparkles")
-                        FeatureChip(title: "原生控件", systemImage: "square.stack.3d.up.fill")
-                        FeatureChip(title: "滑动审查", systemImage: "hand.draw.fill")
-                    }
-                }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    GlassEffectContainer(spacing: 12) {
-                        HStack(spacing: 12) {
-                            FeatureChip(title: "Liquid Glass", systemImage: "sparkles")
-                            FeatureChip(title: "原生控件", systemImage: "square.stack.3d.up.fill")
-                        }
-                    }
-                    FeatureChip(title: "滑动审查", systemImage: "hand.draw.fill")
+                    Text("整理你的相册")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+
+                    Text("点击底部按钮进入审查，标记为待删除的照片会保存在回收站。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -136,18 +114,12 @@ struct HomeView: View {
 
     private var onboardingPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("开始之前", systemImage: "wand.and.stars")
+            Label("开始之前", systemImage: "photo.on.rectangle.angled")
                 .font(.headline.weight(.semibold))
 
-            Text("应用会向系统相册申请读写权限，每轮抽取 100 张照片进行审查。你可以左滑保留、上滑放入回收站、右滑返回上一张。")
+            Text("应用会向系统相册申请读写权限。不会在启动时自动进入审查，点击底部按钮后才会开始或继续当前批次。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-
-            VStack(spacing: 10) {
-                StatusRow(title: "浏览方式", value: "标准 Tab + Navigation", systemImage: "rectangle.bottomthird.inset.filled")
-                StatusRow(title: "卡片交互", value: "全屏原生滑动审查", systemImage: "arrow.left.and.right.square.fill")
-                StatusRow(title: "删除确认", value: "系统弹窗与底部表单", systemImage: "checklist.checked")
-            }
         }
         .dashboardPanel()
     }
@@ -194,13 +166,23 @@ struct HomeView: View {
         guard !viewModel.isLoading else { return }
 
         if viewModel.currentPhotos.isEmpty {
-            Task { await viewModel.loadRandomPhotos() }
+            Task {
+                await viewModel.loadRandomPhotos()
+                if !viewModel.currentPhotos.isEmpty {
+                    viewModel.isReviewing = true
+                }
+            }
             return
         }
 
         if viewModel.isBatchComplete {
             guard viewModel.hasMorePhotos else { return }
-            Task { await viewModel.startNewRound() }
+            Task {
+                await viewModel.startNewRound()
+                if !viewModel.currentPhotos.isEmpty {
+                    viewModel.isReviewing = true
+                }
+            }
             return
         }
 
